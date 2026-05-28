@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RE/MAX — Proyección de Ingresos</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div id="tc"></div><div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div><div class="ph-title">📈 Proyección de Ingresos</div><div class="ph-sub" id="ing-year"></div></div>
+    <div class="flex gap-sm" style="align-items:center">
+      <label style="font-size:12px;color:var(--text2)">Objetivo anual USD</label>
+      <input id="objetivoAnual" type="number" value="100000" style="width:130px" onchange="actualizar()">
+      <input id="ingYear" type="number" style="width:90px" onchange="actualizar()">
+    </div>
+  </div>
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi"><div class="kpi-label">Objetivo acumulado</div><div class="kpi-val" id="k-obj" style="font-size:16px">—</div></div>
+    <div class="kpi good"><div class="kpi-label">Real acumulado</div><div class="kpi-val" id="k-real" style="font-size:16px">—</div></div>
+    <div class="kpi" id="k-dif-card"><div class="kpi-label">Diferencia</div><div class="kpi-val" id="k-dif" style="font-size:16px">—</div></div>
+    <div class="kpi"><div class="kpi-label">% cumplido</div><div class="kpi-val" id="k-pct">—</div><div class="kpi-bar"><div class="kpi-fill" id="k-fill" style="width:0%"></div></div></div>
+  </div>
+  <div class="card" style="margin-bottom:1rem">
+    <div class="card-title">Objetivo vs real por mes</div>
+    <canvas id="ingChart" height="80"></canvas>
+  </div>
+  <div class="card">
+    <div class="card-title">Detalle mensual</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Mes</th><th>Est. %</th><th>Objetivo USD</th><th>Real USD</th><th>Diferencia</th><th>Cumplimiento</th></tr></thead>
+        <tbody id="ingBody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var PCT_EST=[4.4,5.2,6.0,6.6,7.2,7.8,8.4,9.0,9.6,11.6,12.0,12.2];
+var uid,ingChart=null,realData={};
+(async function(){var r=await initPage('ingresos.html');if(!r)return;uid=r.user.id;var now=new Date();document.getElementById('ingYear').value=now.getFullYear();document.getElementById('ing-year').textContent=now.getFullYear();await actualizar();})();
+async function actualizar(){
+  var year=parseInt(document.getElementById('ingYear').value)||new Date().getFullYear();
+  document.getElementById('ing-year').textContent=year;
+  var objetivo=parseFloat(document.getElementById('objetivoAnual').value)||100000;
+  // Ingresos en USD desde transactions
+  var r=await sb.from('transactions').select('date,amount,currency').eq('user_id',uid).eq('type','ingreso').eq('currency','usd').gte('date',year+'-01-01').lte('date',year+'-12-31');
+  realData={};(r.data||[]).forEach(function(tx){var m=parseInt(tx.date.split('-')[1]);realData[m]=(realData[m]||0)+Number(tx.amount);});
+  var now=new Date(),curMonth=now.getMonth()+1;
+  var realAcum=0,objAcum=0;
+  for(var m=1;m<=curMonth;m++){objAcum+=objetivo*PCT_EST[m-1]/100;realAcum+=(realData[m]||0);}
+  var dif=realAcum-objAcum,p=objAcum>0?Math.round(realAcum/objAcum*100):0;
+  document.getElementById('k-obj').textContent=fmtU(Math.round(objAcum));
+  document.getElementById('k-real').textContent=fmtU(Math.round(realAcum));
+  document.getElementById('k-dif').textContent=(dif>=0?'+':'')+fmtU(Math.round(dif));
+  document.getElementById('k-dif-card').className='kpi '+(dif>=0?'good':'bad');
+  document.getElementById('k-pct').textContent=p+'%';
+  document.getElementById('k-fill').style.width=Math.min(p,100)+'%';
+  document.getElementById('k-fill').style.background=p>=80?'var(--green)':p>=50?'var(--amber)':'var(--red)';
+  var rows='';
+  for(var m=1;m<=12;m++){
+    var obj=Math.round(objetivo*PCT_EST[m-1]/100),real=Math.round(realData[m]||0),d=real-obj,isFuture=m>curMonth,pM=obj>0?Math.round(real/obj*100):0;
+    rows+='<tr style="'+(isFuture?'opacity:.5':'')+'"><td style="font-weight:500">'+MN[m-1]+'</td><td style="color:var(--text3)">'+PCT_EST[m-1]+'%</td><td>'+fmtU(obj)+'</td><td style="font-weight:500;color:'+(real>0?'var(--green)':'var(--text3)')+'">'+fmtU(real)+'</td><td style="font-weight:600;color:'+(d>=0?'var(--green)':'var(--red)')+'">'+(d>=0?'+':'')+fmtU(d)+'</td><td>'+(isFuture?'<span class="muted">—</span>':'<div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:5px;background:var(--border2);border-radius:99px;overflow:hidden;min-width:50px"><div style="height:100%;width:'+Math.min(pM,100)+'%;background:'+(pM>=80?'var(--green)':pM>=50?'var(--amber)':'var(--red)')+';border-radius:99px"></div></div><span style="font-size:11px;font-weight:600">'+pM+'%</span></div>')+'</td></tr>';
+  }
+  document.getElementById('ingBody').innerHTML=rows;
+  var objArr=PCT_EST.map(function(p2){return Math.round(objetivo*p2/100);});
+  var realArr=[];for(var m=1;m<=12;m++)realArr.push(m<=curMonth?(realData[m]||0):null);
+  if(ingChart)ingChart.destroy();
+  ingChart=new Chart(document.getElementById('ingChart').getContext('2d'),{type:'bar',data:{labels:MNS,datasets:[{label:'Objetivo',data:objArr,backgroundColor:'rgba(24,95,165,.2)',borderColor:'rgba(24,95,165,.6)',borderWidth:1.5,borderRadius:4},{label:'Real',data:realArr,backgroundColor:realArr.map(function(v,i){if(v===null)return'transparent';return v>=(objArr[i]||0)?'rgba(26,122,60,.8)':'rgba(204,0,0,.8)';}),borderRadius:4}]},options:{responsive:true,plugins:{legend:{labels:{font:{size:11}}}},scales:{y:{beginAtZero:true,ticks:{precision:0,font:{size:11}},grid:{color:'rgba(0,0,0,.04)'}},x:{grid:{display:false},ticks:{font:{size:11}}}}}});
+}
+</script>
+</body>
+</html>

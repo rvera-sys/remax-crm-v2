@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#cc0000">
+<title>RE/MAX — Operaciones</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div>
+<div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div>
+      <div class="ph-title">🏠 Operaciones</div>
+      <div class="ph-sub" id="ops-sub"></div>
+    </div>
+    <div class="flex gap-sm">
+      <button class="btn" id="btn-kanban" onclick="setView('kanban')">Kanban</button>
+      <button class="btn" id="btn-lista" onclick="setView('lista')">Lista</button>
+      <button class="btn btn-primary" onclick="openModal()">+ Nueva operación</button>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi"><div class="kpi-label">Activas</div><div class="kpi-val" id="k-act">—</div><div class="kpi-sub">en pipeline</div></div>
+    <div class="kpi good"><div class="kpi-label">Cerradas este año</div><div class="kpi-val" id="k-cer">—</div><div class="kpi-sub">escrituras / contratos</div></div>
+    <div class="kpi good"><div class="kpi-label">Comisiones esperadas</div><div class="kpi-val" id="k-com" style="font-size:16px">—</div><div class="kpi-sub">USD total en pipeline</div></div>
+    <div class="kpi"><div class="kpi-label">Facturas pendientes</div><div class="kpi-val" id="k-inv">—</div><div class="kpi-sub">por cobrar</div></div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="flex gap-sm" style="flex-wrap:wrap">
+      <select id="ftype" onchange="doFilter()" style="width:auto">
+        <option value="">Ventas y alquileres</option>
+        <option value="venta">Solo ventas</option>
+        <option value="alquiler">Solo alquileres</option>
+      </select>
+      <select id="fstage" onchange="doFilter()" style="width:auto">
+        <option value="">Todas las etapas</option>
+        <option value="pre_listing">Pre-listing</option>
+        <option value="tasacion">Tasación</option>
+        <option value="captacion">Captación</option>
+        <option value="marketing">Marketing</option>
+        <option value="negociacion">Negociación</option>
+        <option value="aceptacion">Aceptación</option>
+        <option value="boleto">Boleto</option>
+        <option value="informes_garantes">Informes garantes</option>
+        <option value="escritura">Escritura</option>
+        <option value="contrato">Contrato</option>
+      </select>
+      <input type="search" id="q" placeholder="Buscar por nombre o dirección…" style="flex:1;min-width:180px" oninput="doFilter()">
+    </div>
+  </div>
+
+  <!-- Kanban -->
+  <div id="view-kanban">
+    <div class="kanban" id="kanban-board"></div>
+  </div>
+
+  <!-- Lista -->
+  <div id="view-lista" class="hidden">
+    <div class="card">
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Vendedor / Propietario</th>
+              <th>Comprador</th>
+              <th>Tipo</th>
+              <th>Etapa</th>
+              <th>Propiedad</th>
+              <th>Com. esperada</th>
+              <th>Días en etapa</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<!-- Modal: Nueva/Editar operación -->
+<div class="overlay hidden" id="modal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-head">
+      <div class="modal-title" id="mtit">Nueva operación</div>
+      <button class="btn btn-sm" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="frow">
+        <label>Tipo de operación</label>
+        <select id="otype">
+          <option value="venta">Venta</option>
+          <option value="alquiler">Alquiler</option>
+        </select>
+      </div>
+
+      <!-- Lado vendedor -->
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:.85rem">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:.6rem">LADO VENDEDOR / PROPIETARIO</div>
+        <div class="frow">
+          <label>Contacto vendedor *</label>
+          <select id="oseller"></select>
+        </div>
+        <div class="frow">
+          <label>% Comisión vendedor</label>
+          <input id="osellerpc" type="number" step="0.5" value="3" placeholder="3">
+        </div>
+      </div>
+
+      <!-- Lado comprador -->
+      <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:.85rem">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:.6rem">LADO COMPRADOR / INQUILINO</div>
+        <div class="frow">
+          <label>Tipo de comprador</label>
+          <select id="obtype" onchange="toggleBuyer()">
+            <option value="directo">Comprador directo (mi cliente)</option>
+            <option value="colega_remax">Colega RE/MAX (comparte operación)</option>
+            <option value="inmobiliaria_externa">Inmobiliaria externa</option>
+          </select>
+        </div>
+        <div id="buyer-direct" class="frow">
+          <label>Contacto comprador</label>
+          <select id="obuyer"><option value="">Sin comprador asignado aún</option></select>
+        </div>
+        <div id="buyer-colleague" class="frow hidden">
+          <label>Colega inmobiliario</label>
+          <select id="ocolleague"><option value="">Seleccionar colega…</option></select>
+        </div>
+        <div class="frow">
+          <label id="buyer-pc-label">% Comisión comprador (mi parte)</label>
+          <input id="obuyerpc" type="number" step="0.5" value="4" placeholder="4" oninput="calcComm()">
+        </div>
+        <div id="split-info" class="hidden" style="font-size:12px;color:var(--text2);padding:.5rem;background:var(--blue-light);border-radius:6px;margin-top:.25rem"></div>
+      </div>
+
+      <!-- Comisiones calculadas -->
+      <div style="background:var(--green-light);border-radius:8px;padding:12px;margin-bottom:.85rem">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:.5rem">RESUMEN DE COMISIONES</div>
+        <div id="comm-preview" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center"></div>
+      </div>
+
+      <div class="frow"><label>Notas</label><textarea id="onotes" placeholder="Observaciones sobre esta operación…"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="bsave" onclick="save()">Crear operación</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Detalle / Avanzar etapa -->
+<div class="overlay hidden" id="modal-det">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="det-title">—</div>
+        <div style="font-size:12px;color:var(--text3)" id="det-sub">—</div>
+      </div>
+      <button class="btn btn-sm" onclick="closeDet()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Progreso de etapas -->
+      <div style="margin-bottom:1rem">
+        <div class="card-title">Progreso</div>
+        <div id="stage-progress" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:.5rem"></div>
+      </div>
+
+      <!-- Datos de la operación -->
+      <div id="det-info" style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem"></div>
+
+      <!-- Historial -->
+      <div class="card-title" style="margin-bottom:.5rem">Historial de etapas</div>
+      <div id="det-history" class="timeline"></div>
+
+      <!-- Avanzar etapa -->
+      <div style="margin-top:1.25rem;padding-top:1rem;border-top:0.5px solid var(--border2)">
+        <div class="card-title">Avanzar a la siguiente etapa</div>
+        <div class="fgrid" style="margin-top:.5rem">
+          <div class="frow">
+            <label>Nueva etapa</label>
+            <select id="new-stage"></select>
+          </div>
+          <div class="frow" id="fx-rate-row" style="display:none">
+            <label>Tipo de cambio USD→ARS</label>
+            <input type="number" id="new-tc" placeholder="1000">
+          </div>
+        </div>
+        <div class="frow"><label>Notas del avance</label><textarea id="new-notes" placeholder="¿Qué pasó en esta etapa?" style="min-height:60px"></textarea></div>
+        <div id="advance-warning" class="alert-box alert-amber hidden"></div>
+        <button class="btn btn-primary" onclick="advanceStage()">Avanzar etapa</button>
+        <a id="prop-btn" href="propiedades.html" class="btn btn-sm hidden" style="margin-left:8px">+ Agregar propiedad</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid, all=[], eid=null, curOp=null, contacts=[], colleagues=[];
+var curView = 'kanban';
+
+// Etapas visibles en el kanban (sin post_venta que es automático)
+var KANBAN_STAGES = ['pre_listing','tasacion','captacion','marketing','negociacion','aceptacion','boleto','informes_garantes','escritura','contrato'];
+
+(async function(){
+  var r = await initPage('operaciones.html'); if(!r) return;
+  uid = r.user.id;
+
+  // Verificar si viene con contacto pre-seleccionado
+  var params = new URLSearchParams(window.location.search);
+  if(params.get('contact')) await openModal(params.get('contact'));
+
+  await loadAll();
+})();
+
+async function loadAll() {
+  var [opsR, conR, colR, invR] = await Promise.all([
+    db.operations.list({user_id:uid}),
+    sb.from('contacts').select('id,name,type').eq('user_id',uid).is('deleted_at',null).order('name'),
+    db.colleagues.list(uid),
+    sb.from('invoices').select('id',{count:'exact',head:true}).eq('user_id',uid).eq('status','pendiente').is('deleted_at',null)
+  ]);
+  all = opsR.data||[];
+  contacts = conR.data||[];
+  colleagues = colR.data||[];
+
+  var active = all.filter(function(o){ return !['escritura','contrato','post_venta'].includes(o.stage); });
+  var closed = all.filter(function(o){ return ['escritura','contrato'].includes(o.stage); });
+  var totalComm = active.reduce(function(s,o){ return s+Number(o.total_commission_usd||0); },0);
+
+  document.getElementById('k-act').textContent = active.length;
+  document.getElementById('k-cer').textContent = closed.length;
+  document.getElementById('k-com').textContent = fmtU(totalComm);
+  document.getElementById('k-inv').textContent = invR.count||0;
+  document.getElementById('ops-sub').textContent = all.length+' operación'+(all.length!==1?'es':'');
+
+  renderView();
+}
+
+function setView(v) {
+  curView = v;
+  document.getElementById('view-kanban').classList.toggle('hidden', v!=='kanban');
+  document.getElementById('view-lista').classList.toggle('hidden', v!=='lista');
+  document.getElementById('btn-kanban').className = 'btn'+(v==='kanban'?' btn-primary':'');
+  document.getElementById('btn-lista').className = 'btn'+(v==='lista'?' btn-primary':'');
+  renderView();
+}
+
+function getFiltered() {
+  var q = document.getElementById('q').value.toLowerCase();
+  var ft = document.getElementById('ftype').value;
+  var fs = document.getElementById('fstage').value;
+  return all.filter(function(o){
+    var sellerName = (o.seller&&o.seller.name||'').toLowerCase();
+    var buyerName  = (o.buyer&&o.buyer.name||'').toLowerCase();
+    var propAddr   = (o.property&&o.property.address||'').toLowerCase();
+    return (!q||sellerName.includes(q)||buyerName.includes(q)||propAddr.includes(q))
+        && (!ft||o.type===ft)
+        && (!fs||o.stage===fs);
+  });
+}
+
+function doFilter() { renderView(); }
+
+function renderView() {
+  if(curView==='kanban') renderKanban();
+  else renderLista();
+}
+
+function renderKanban() {
+  var list = getFiltered();
+  var board = document.getElementById('kanban-board');
+  board.innerHTML = KANBAN_STAGES.map(function(stage){
+    var ops = list.filter(function(o){ return o.stage===stage; });
+    var cards = ops.map(function(o){
+      var seller = o.seller||{};
+      var comm = Number(o.total_commission_usd||0);
+      return '<div class="kanban-card" onclick="openDetail(\''+o.id+'\')">'
+        +'<div class="kanban-card-name">'+seller.name+'</div>'
+        +'<div class="kanban-card-sub">'+(o.property&&o.property.address?o.property.address:'Sin propiedad aún')+'</div>'
+        +(o.buyer?'<div class="kanban-card-sub">🤝 '+o.buyer.name+'</div>':'')
+        +'<div class="kanban-card-type" style="color:'+(o.type==='venta'?'var(--blue)':'var(--green)');+'">'
+        +(o.type==='venta'?'Venta':'Alquiler')+(comm?' · '+fmtU(comm):'')+'</div>'
+        +'</div>';
+    }).join('');
+    return '<div class="kanban-col">'
+      +'<div class="kanban-col-head"><span>'+(STAGE_LABELS[stage]||stage)+'</span><span style="background:var(--red-light);color:var(--red);font-size:10px;padding:1px 6px;border-radius:99px">'+ops.length+'</span></div>'
+      +'<div class="kanban-col-body">'+cards+(ops.length===0?'<div style="font-size:11px;color:var(--text3);text-align:center;padding:.5rem">Sin operaciones</div>':'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function renderLista() {
+  var list = getFiltered();
+  var tb = document.getElementById('tbody');
+  if(!list.length){ tb.innerHTML='<tr><td colspan="8"><div class="empty">Sin operaciones.</div></td></tr>'; return; }
+  var today = hoy();
+  tb.innerHTML = list.map(function(o){
+    var seller = o.seller||{};
+    var buyer  = o.buyer||{};
+    var days   = Math.round((new Date()-new Date(o.stage_date||o.updated_at))/(1000*60*60*24));
+    var daysColor = days>30?'var(--red)':days>14?'var(--amber)':'var(--text3)';
+    return '<tr>'
+      +'<td><div style="display:flex;align-items:center;gap:8px"><div class="avatar avatar-sm">'+ini(seller.name||'')+'</div><div style="font-weight:500;font-size:13px">'+(seller.name||'—')+'</div></div></td>'
+      +'<td style="color:var(--text2)">'+(buyer.name||'<span style="color:var(--text3)">—</span>')+'</td>'
+      +'<td><span class="badge '+(o.type==='venta'?'badge-blue':'badge-green')+'">'+(o.type==='venta'?'Venta':'Alquiler')+'</span></td>'
+      +'<td><span class="badge stage-'+o.stage+'">'+(STAGE_LABELS[o.stage]||o.stage)+'</span></td>'
+      +'<td style="font-size:12px;color:var(--text2)">'+(o.property&&o.property.address||'—')+'</td>'
+      +'<td style="font-weight:500;color:var(--green)">'+fmtU(o.total_commission_usd||0)+'</td>'
+      +'<td style="color:'+daysColor+';font-size:12px">'+days+' días</td>'
+      +'<td><button class="btn btn-sm btn-primary" data-id="'+o.id+'" onclick="detBtn(this)">Ver</button></td>'
+      +'</tr>';
+  }).join('');
+}
+
+function detBtn(btn) { openDetail(btn.getAttribute('data-id')); }
+
+// ── MODAL NUEVA OPERACIÓN ──────────────────────────────────────────
+async function openModal(preContactId) {
+  eid=null; document.getElementById('mtit').textContent='Nueva operación';
+  document.getElementById('otype').value='venta';
+  document.getElementById('obtype').value='directo';
+  document.getElementById('osellerpc').value='3';
+  document.getElementById('obuyerpc').value='4';
+  document.getElementById('onotes').value='';
+  // Poblar selectores
+  var sellerSel = document.getElementById('oseller');
+  var buyerSel  = document.getElementById('obuyer');
+  var colSel    = document.getElementById('ocolleague');
+  sellerSel.innerHTML = '<option value="">Seleccionar contacto…</option>';
+  buyerSel.innerHTML  = '<option value="">Sin comprador asignado aún</option>';
+  contacts.forEach(function(c){
+    var opt = '<option value="'+c.id+'">'+c.name+' ('+TYPE_L[c.type]+')</option>';
+    sellerSel.innerHTML += opt;
+    buyerSel.innerHTML  += opt;
+  });
+  colSel.innerHTML = '<option value="">Seleccionar colega…</option>';
+  colleagues.forEach(function(c){ colSel.innerHTML += '<option value="'+c.id+'">'+c.name+' — '+(c.agency_name||'')+'</option>'; });
+  if(preContactId) sellerSel.value = preContactId;
+  toggleBuyer();
+  calcComm();
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal(){ document.getElementById('modal').classList.add('hidden'); eid=null; }
+
+function toggleBuyer() {
+  var bt = document.getElementById('obtype').value;
+  document.getElementById('buyer-direct').classList.toggle('hidden', bt!=='directo');
+  document.getElementById('buyer-colleague').classList.toggle('hidden', bt==='directo');
+  var pcLabel = document.getElementById('buyer-pc-label');
+  var splitInfo = document.getElementById('split-info');
+  if(bt==='colega_remax'){
+    pcLabel.textContent='% Comisión comprador (mi parte)';
+    splitInfo.classList.remove('hidden');
+    splitInfo.textContent='Colega RE/MAX: total 7% dividido 50/50. Cada uno factura a su cliente.';
+    document.getElementById('obuyerpc').value=3.5;
+  } else if(bt==='inmobiliaria_externa'){
+    pcLabel.textContent='% que me cede la inmobiliaria externa';
+    splitInfo.classList.remove('hidden');
+    splitInfo.textContent='Inmobiliaria externa: te cede 2% fijo del valor de venta.';
+    document.getElementById('obuyerpc').value=2;
+  } else {
+    pcLabel.textContent='% Comisión comprador (mi parte)';
+    splitInfo.classList.add('hidden');
+    document.getElementById('obuyerpc').value=4;
+  }
+  calcComm();
+}
+
+function calcComm() {
+  var spc = parseFloat(document.getElementById('osellerpc').value)||0;
+  var bpc = parseFloat(document.getElementById('obuyerpc').value)||0;
+  var total = spc+bpc;
+  document.getElementById('comm-preview').innerHTML =
+    commBox('Comisión vendedor',spc+'%','var(--text)')
+    +commBox('Comisión comprador',bpc+'%','var(--text)')
+    +commBox('Total mi parte',total+'%','var(--green)');
+}
+
+function commBox(label, val, color) {
+  return '<div><div style="font-size:10px;color:var(--text3);margin-bottom:2px">'+label+'</div>'
+    +'<div style="font-size:16px;font-weight:700;color:'+color+'">'+val+'</div></div>';
+}
+
+async function save() {
+  var sellerId = document.getElementById('oseller').value;
+  if(!sellerId){ toast('Seleccioná el contacto vendedor','error'); return; }
+  var btn = document.getElementById('bsave'); btn.disabled=true; btn.textContent='Guardando…';
+  var spc = parseFloat(document.getElementById('osellerpc').value)||3;
+  var bpc = parseFloat(document.getElementById('obuyerpc').value)||4;
+  var bt  = document.getElementById('obtype').value;
+  var p = {
+    user_id:uid, type:document.getElementById('otype').value,
+    seller_contact_id:sellerId, seller_commission_pct:spc,
+    buyer_type:bt,
+    buyer_contact_id:bt==='directo'?(document.getElementById('obuyer').value||null):null,
+    buyer_colleague_id:bt!=='directo'?(document.getElementById('ocolleague').value||null):null,
+    buyer_commission_pct:bpc,
+    internal_split_pct:bt==='colega_remax'?50:100,
+    external_agency_cedes_pct:bt==='inmobiliaria_externa'?bpc:0,
+    stage:'pre_listing', stage_date:hoy(),
+    stage_history:JSON.stringify([{stage:'pre_listing',date:hoy(),user_id:uid}]),
+    notes:document.getElementById('onotes').value.trim()||null
+  };
+
+  // Calcular totales estimados (sin precio aún)
+  p.total_commission_usd = 0;
+  p.total_billed_usd = 0;
+
+  var r = await db.operations.insert(p);
+  btn.disabled=false; btn.textContent='Crear operación';
+  if(r.error){ toast('Error: '+r.error.message,'error'); return; }
+
+  // Crear evento en Google Calendar
+  if(CRM.googleAccessToken && r.data) {
+    var seller = contacts.find(function(c){ return c.id===sellerId; });
+    calendarCreateEvent({
+      title:'Pre-listing: '+(seller&&seller.name||'Nueva operación'),
+      description:'Operación '+(p.type==='venta'?'de venta':'de alquiler')+' iniciada.\nLink CRM: '+window.location.origin+'/operaciones.html',
+      date:hoy(), duration_minutes:60, type:'pre_listing'
+    }).then(function(evId){
+      if(evId) db.operations.update(r.data.id, {calendar_event_id:evId});
+    });
+  }
+
+  toast('Operación creada'); closeModal(); await loadAll();
+}
+
+// ── MODAL DETALLE ────────────────────────────────────────────────────
+async function openDetail(id) {
+  var opR = await db.operations.get(id);
+  if(opR.error){ toast('Error al cargar','error'); return; }
+  curOp = opR.data;
+  var seller = curOp.seller||{};
+  var buyer  = curOp.buyer||{};
+  var prop   = curOp.property||{};
+
+  document.getElementById('det-title').textContent = seller.name||(curOp.type==='venta'?'Venta':'Alquiler');
+  document.getElementById('det-sub').textContent   = (STAGE_LABELS[curOp.stage]||curOp.stage)+' · '+(curOp.type==='venta'?'Venta':'Alquiler');
+
+  // Progreso visual
+  var stages = curOp.type==='venta'
+    ? ['pre_listing','tasacion','captacion','marketing','negociacion','aceptacion','boleto','escritura']
+    : ['pre_listing','tasacion','captacion','marketing','negociacion','aceptacion','informes_garantes','contrato'];
+  var curIdx = stages.indexOf(curOp.stage);
+  document.getElementById('stage-progress').innerHTML = stages.map(function(s,i){
+    var done = i<curIdx, active = i===curIdx;
+    var bg = done?'var(--green)':active?'var(--red)':'var(--border)';
+    var col = (done||active)?'#fff':'var(--text3)';
+    return '<span style="background:'+bg+';color:'+col+';font-size:10px;padding:3px 8px;border-radius:99px">'+(STAGE_LABELS[s]||s)+'</span>';
+  }).join('');
+
+  // Info de la operación
+  document.getElementById('det-info').innerHTML =
+    detBox('Vendedor', seller.name||'—')
+    +detBox('Comprador', buyer.name||(curOp.buyer_colleague_id?'Colega inmobiliario':'Sin asignar'))
+    +detBox('Propiedad', prop.address||'Sin propiedad aún')
+    +detBox('Comisión esperada', fmtU(curOp.total_commission_usd||0))
+    +detBox('Com. vendedor', (curOp.seller_commission_pct||0)+'%')
+    +detBox('Com. comprador', (curOp.buyer_commission_pct||0)+'%');
+
+  // Historial
+  var hist = curOp.stage_history||[];
+  document.getElementById('det-history').innerHTML = hist.length
+    ? hist.map(function(h,i){
+        var isLast = i===hist.length-1;
+        return '<div class="tl-item">'
+          +'<div class="tl-dot-wrap"><div class="tl-dot '+(isLast?'active':'done')+'"></div>'+(isLast?'':'<div class="tl-line"></div>')+'</div>'
+          +'<div class="tl-content"><div class="tl-title">'+(STAGE_LABELS[h.stage]||h.stage)+'</div>'
+          +'<div class="tl-date">'+fd(h.date)+'</div>'
+          +(h.notes?'<div class="tl-note">'+h.notes+'</div>':'')+'</div></div>';
+      }).join('')
+    : '<div class="muted">Sin historial.</div>';
+
+  // Siguiente etapa disponible
+  var nextStage = getNextStage(curOp.stage, curOp.type);
+  var nsSel = document.getElementById('new-stage');
+  nsSel.innerHTML = '';
+  if(nextStage) {
+    STAGE_ORDER.slice(STAGE_ORDER.indexOf(curOp.stage)+1).forEach(function(s){
+      if(curOp.type==='venta' && s==='informes_garantes') return;
+      if(curOp.type==='alquiler' && s==='boleto') return;
+      if(curOp.type==='alquiler' && s==='escritura') return;
+      nsSel.innerHTML += '<option value="'+s+'">'+(STAGE_LABELS[s]||s)+'</option>';
+    });
+  }
+
+  // Mostrar campo tipo de cambio en etapas de cierre
+  var closingStages = ['boleto','escritura','contrato'];
+  document.getElementById('fx-rate-row').style.display = closingStages.includes(curOp.stage)?'':'none';
+
+  // Warning si llega a captación y no tiene propiedad
+  var warn = document.getElementById('advance-warning');
+  if(!curOp.property_id && STAGE_ORDER.indexOf(nextStage) >= STAGE_ORDER.indexOf('captacion')) {
+    warn.classList.remove('hidden');
+    warn.textContent = '⚠️ Al avanzar a Captación se recomienda agregar la propiedad.';
+    document.getElementById('prop-btn').classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+    document.getElementById('prop-btn').classList.add('hidden');
+  }
+
+  document.getElementById('modal-det').classList.remove('hidden');
+}
+
+function detBox(label, val) {
+  return '<div style="background:var(--surface2);border-radius:6px;padding:8px 10px">'
+    +'<div style="font-size:10px;color:var(--text3);margin-bottom:2px">'+label+'</div>'
+    +'<div style="font-size:13px;font-weight:500">'+val+'</div></div>';
+}
+
+function getNextStage(current, type) {
+  var idx = STAGE_ORDER.indexOf(current);
+  if(idx<0||idx>=STAGE_ORDER.length-1) return null;
+  return STAGE_ORDER[idx+1];
+}
+
+function closeDet() { document.getElementById('modal-det').classList.add('hidden'); curOp=null; }
+
+async function advanceStage() {
+  if(!curOp) return;
+  var newStage = document.getElementById('new-stage').value;
+  var notes    = document.getElementById('new-notes').value.trim();
+  if(!newStage){ toast('Seleccioná la nueva etapa','error'); return; }
+
+  var tc = parseFloat(document.getElementById('new-tc').value)||null;
+  if(['boleto','escritura','contrato'].includes(newStage) && !tc) {
+    toast('Ingresá el tipo de cambio para etapas de cierre','error');
+    return;
+  }
+
+  var r = await db.operations.advance(curOp.id, newStage, notes);
+  if(r.error){ toast('Error: '+r.error.message,'error'); return; }
+
+  // Si hay tipo de cambio, actualizar en la operación
+  if(tc) {
+    await db.operations.update(curOp.id, { exchange_rate:tc });
+    await db.exchangeRate.set(uid, tc);
+  }
+
+  // Crear evento en Calendar
+  if(CRM.googleAccessToken) {
+    calendarCreateEvent({
+      title:(STAGE_LABELS[newStage]||newStage)+': '+(curOp.seller&&curOp.seller.name||''),
+      description:notes||'',
+      date:hoy(), duration_minutes:60,
+      type:newStage==='boleto'||newStage==='escritura'||newStage==='contrato'?'operacion':'reunion'
+    });
+  }
+
+  // Si llega a escritura o contrato → mail al broker
+  if(['escritura','contrato'].includes(newStage) && isBroker()===false) {
+    var brokersR = await sb.from('users').select('email').eq('role','broker').single();
+    if(brokersR.data && CRM.googleAccessToken) {
+      gmailSend(brokersR.data.email,
+        'RE/MAX CRM — Cierre: '+(curOp.seller&&curOp.seller.name||''),
+        '<p>El agente '+CRM.user.name+' registró un cierre: <strong>'+STAGE_LABELS[newStage]+'</strong></p>'
+        +'<p>Operación: '+(curOp.type==='venta'?'Venta':'Alquiler')+'</p>'
+        +'<p><a href="'+window.location.origin+'/operaciones.html">Ver en CRM →</a></p>'
+      );
+    }
+  }
+
+  toast('Etapa avanzada a '+(STAGE_LABELS[newStage]||newStage));
+  closeDet();
+  await loadAll();
+}
+</script>
+</body>
+</html>

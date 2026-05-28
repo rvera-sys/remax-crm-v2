@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#cc0000">
+<title>RE/MAX — ACM / Tasaciones</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div>
+<div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div>
+      <div class="ph-title">📋 ACM / Tasaciones</div>
+      <div class="ph-sub" id="acm-sub"></div>
+    </div>
+    <button class="btn btn-primary" onclick="openModal()">+ Nueva tasación</button>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-val" id="k-total">—</div><div class="kpi-sub">tasaciones</div></div>
+    <div class="kpi warn"><div class="kpi-label">Pendientes</div><div class="kpi-val" id="k-pend">—</div><div class="kpi-sub">sin respuesta</div></div>
+    <div class="kpi bad"><div class="kpi-label">Rechazadas</div><div class="kpi-val" id="k-rech">—</div><div class="kpi-sub">en nurturing</div></div>
+    <div class="kpi good"><div class="kpi-label">Aceptadas</div><div class="kpi-val" id="k-acep">—</div><div class="kpi-sub">→ captación</div></div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="flex gap-sm" style="flex-wrap:wrap">
+      <input type="search" id="q" placeholder="Buscar por dirección o contacto…" style="flex:1;min-width:180px" oninput="doFilter()">
+      <select id="fout" onchange="doFilter()" style="width:auto">
+        <option value="">Todos los estados</option>
+        <option value="pendiente">Pendiente</option>
+        <option value="aceptado">Aceptado</option>
+        <option value="rechazado">Rechazado</option>
+      </select>
+      <select id="fop" onchange="doFilter()" style="width:auto">
+        <option value="">Venta y alquiler</option>
+        <option value="venta">Venta</option>
+        <option value="alquiler">Alquiler</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Tabla -->
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Contacto</th>
+            <th>Dirección</th>
+            <th>Operación</th>
+            <th>Fecha</th>
+            <th>Valor estimado</th>
+            <th>Precio sugerido</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- Modal: Nueva/Editar ACM -->
+<div class="overlay hidden" id="modal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-head">
+      <div class="modal-title" id="mtit">Nueva tasación</div>
+      <button class="btn btn-sm" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="frow">
+        <label>Contacto *</label>
+        <select id="acont"></select>
+      </div>
+      <div class="frow">
+        <label>Dirección de la propiedad *</label>
+        <input id="adir" placeholder="Av. Corrientes 1234, CABA">
+      </div>
+      <div class="fgrid">
+        <div class="frow">
+          <label>Tipo de operación</label>
+          <select id="aop">
+            <option value="venta">Venta</option>
+            <option value="alquiler">Alquiler</option>
+          </select>
+        </div>
+        <div class="frow">
+          <label>Fecha de presentación</label>
+          <input id="afecha" type="date">
+        </div>
+      </div>
+      <div class="fgrid">
+        <div class="frow">
+          <label>Superficie (m²)</label>
+          <input id="asup" type="number" placeholder="70">
+        </div>
+        <div class="frow">
+          <label>Ambientes</label>
+          <input id="aamb" type="number" placeholder="3">
+        </div>
+      </div>
+      <div class="fgrid">
+        <div class="frow">
+          <label>Valor estimado USD</label>
+          <input id="aval" type="number" placeholder="150000" oninput="calcSug()">
+        </div>
+        <div class="frow">
+          <label>Precio sugerido USD</label>
+          <input id="asug" type="number" placeholder="145000">
+        </div>
+      </div>
+
+      <!-- Comparables -->
+      <div class="frow">
+        <label>Observaciones / Comparables</label>
+        <textarea id="anotes" placeholder="Propiedades comparables, estado del mercado, observaciones…" style="min-height:80px"></textarea>
+      </div>
+
+      <!-- Estado -->
+      <div class="frow">
+        <label>Estado del ACM</label>
+        <select id="aout" onchange="toggleOutcome()">
+          <option value="pendiente">Pendiente (presentado, esperando respuesta)</option>
+          <option value="aceptado">Aceptado ✅ → inicia captación</option>
+          <option value="rechazado">Rechazado ❌ → inicia nurturing automático</option>
+        </select>
+      </div>
+
+      <!-- Si rechazado: motivo -->
+      <div id="rejection-row" class="frow hidden">
+        <label>Motivo del rechazo</label>
+        <textarea id="arejreason" placeholder="¿Por qué no aceptó? (precio, timing, prefiere otro agente…)" style="min-height:60px"></textarea>
+      </div>
+
+      <!-- Alerta nurturing -->
+      <div id="nurturing-alert" class="alert-box alert-amber hidden">
+        🔄 Al marcar como rechazado se crearán automáticamente los toques de nurturing (7d / 30d / 60d / 90d / mensual) y se enviarán a Google Calendar.
+      </div>
+
+      <!-- Alerta captación -->
+      <div id="captacion-alert" class="alert-box alert-green hidden">
+        ✅ Al marcar como aceptado se avanzará la operación a etapa de Captación automáticamente.
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="bsave" onclick="save()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid, all=[], eid=null, contacts=[];
+var OUT_BC = { pendiente:'badge-amber', aceptado:'badge-green', rechazado:'badge-red' };
+var OUT_L  = { pendiente:'Pendiente', aceptado:'Aceptado', rechazado:'Rechazado' };
+
+(async function(){
+  var r = await initPage('acm.html'); if(!r) return;
+  uid = r.user.id;
+  await load();
+})();
+
+async function load() {
+  var [acmR, conR] = await Promise.all([
+    db.acms.list({user_id:uid}),
+    sb.from('contacts').select('id,name,type').eq('user_id',uid).is('deleted_at',null).order('name')
+  ]);
+  all = acmR.data||[];
+  contacts = conR.data||[];
+  document.getElementById('acm-sub').textContent = all.length+' tasación'+(all.length!==1?'es':'');
+  document.getElementById('k-total').textContent = all.length;
+  document.getElementById('k-pend').textContent  = all.filter(function(a){ return a.outcome==='pendiente'; }).length;
+  document.getElementById('k-rech').textContent  = all.filter(function(a){ return a.outcome==='rechazado'; }).length;
+  document.getElementById('k-acep').textContent  = all.filter(function(a){ return a.outcome==='aceptado'; }).length;
+  render(all);
+}
+
+function render(list) {
+  var tb = document.getElementById('tbody');
+  if(!list.length) {
+    tb.innerHTML = '<tr><td colspan="8"><div class="empty">Sin tasaciones registradas.<br><button class="btn btn-primary" style="margin-top:.75rem" onclick="openModal()">+ Nueva tasación</button></div></td></tr>';
+    return;
+  }
+  tb.innerHTML = list.map(function(a){
+    var cname = (a.contact&&a.contact.name)||'—';
+    return '<tr>'
+      +'<td><div style="display:flex;align-items:center;gap:8px"><div class="avatar avatar-sm">'+ini(cname)+'</div><div style="font-weight:500">'+cname+'</div></div></td>'
+      +'<td style="font-size:13px">'+a.address+'</td>'
+      +'<td><span class="badge '+(a.operation_type==='venta'?'badge-blue':'badge-green')+'">'+(a.operation_type==='venta'?'Venta':'Alquiler')+'</span></td>'
+      +'<td style="color:var(--text3)">'+fd(a.presented_date)+'</td>'
+      +'<td style="color:var(--text2)">'+fmtU(a.estimated_value_usd||0)+'</td>'
+      +'<td style="font-weight:500;color:var(--green)">'+fmtU(a.suggested_price_usd||0)+'</td>'
+      +'<td><span class="badge '+(OUT_BC[a.outcome]||'badge-gray')+'">'+(OUT_L[a.outcome]||a.outcome)+'</span></td>'
+      +'<td><div class="flex gap-sm">'
+      +(a.outcome==='pendiente'
+        ? '<button class="btn btn-sm btn-green" data-id="'+a.id+'" onclick="acceptBtn(this)">✅ Acepta</button>'
+          +'<button class="btn btn-sm" style="color:var(--red);border-color:var(--red-mid)" data-id="'+a.id+'" onclick="rejectBtn(this)">❌ Rechaza</button>'
+        : '')
+      +'<button class="btn btn-sm" data-id="'+a.id+'" onclick="editBtn(this)">Editar</button>'
+      +'</div></td></tr>';
+  }).join('');
+}
+
+function doFilter() {
+  var q = document.getElementById('q').value.toLowerCase();
+  var fo = document.getElementById('fout').value;
+  var fp = document.getElementById('fop').value;
+  render(all.filter(function(a){
+    return (!q||(a.address||'').toLowerCase().includes(q)||((a.contact&&a.contact.name)||'').toLowerCase().includes(q))
+        && (!fo||a.outcome===fo) && (!fp||a.operation_type===fp);
+  }));
+}
+
+// Aceptar / Rechazar rápido desde la tabla
+function acceptBtn(btn) { quickOutcome(btn.getAttribute('data-id'), 'aceptado'); }
+function rejectBtn(btn) { quickOutcome(btn.getAttribute('data-id'), 'rechazado'); }
+
+async function quickOutcome(id, outcome) {
+  var acm = all.find(function(a){ return a.id===id; }); if(!acm) return;
+  if(outcome==='rechazado') {
+    if(!confirm('¿Marcar como rechazado? Se crearán los toques de nurturing automáticamente.')) return;
+    await processRejection(acm);
+  } else {
+    await db.acms.update(id, {outcome:'aceptado'});
+    // Avanzar operación a captación si existe
+    if(acm.operation_id) {
+      await db.operations.advance(acm.operation_id, 'captacion', 'ACM aceptado');
+    }
+    toast('Tasación aceptada ✅');
+  }
+  await load();
+}
+
+async function processRejection(acm) {
+  // 1. Marcar como rechazado
+  await db.acms.update(acm.id, { outcome:'rechazado', rejection_reason:null });
+  // 2. Activar nurturing en Supabase (crea followups + cambia status contacto)
+  var r = await db.acms.reject(acm.id, acm.contact_id, uid);
+  if(r.error){ toast('Error al activar nurturing: '+r.error.message,'error'); return; }
+  // 3. Crear eventos en Google Calendar
+  if(CRM.googleAccessToken) {
+    var followups = [
+      {id:'7d',  stage:'7d',     scheduled_date: addDays(hoy(), 7)},
+      {id:'30d', stage:'30d',    scheduled_date: addDays(hoy(), 30)},
+      {id:'60d', stage:'60d',    scheduled_date: addDays(hoy(), 60)},
+      {id:'90d', stage:'90d',    scheduled_date: addDays(hoy(), 90)},
+    ];
+    var cname = (acm.contact&&acm.contact.name)||'Contacto';
+    await calendarCreateNurturing({name:cname}, followups);
+  }
+  // 4. Mail al agente
+  if(CRM.user.email && CRM.googleAccessToken) {
+    var cname = (acm.contact&&acm.contact.name)||'Contacto';
+    gmailSend(CRM.user.email,
+      'RE/MAX CRM — Nurturing activado: '+cname,
+      '<p>La tasación de <strong>'+acm.address+'</strong> fue rechazada por '+cname+'.</p>'
+      +'<p>Se crearon automáticamente los toques de nurturing en tu Google Calendar:</p>'
+      +'<ul><li>+7 días: 1er toque</li><li>+30 días: 2do toque</li><li>+60 días: 3er toque</li><li>+90 días: 4to toque</li></ul>'
+      +'<p><a href="'+window.location.origin+'/nurturing.html">Ver nurturing →</a></p>'
+    );
+  }
+  toast('Nurturing activado — toques creados en Calendar 🔄');
+}
+
+function toggleOutcome() {
+  var v = document.getElementById('aout').value;
+  document.getElementById('rejection-row').classList.toggle('hidden', v!=='rechazado');
+  document.getElementById('nurturing-alert').classList.toggle('hidden', v!=='rechazado');
+  document.getElementById('captacion-alert').classList.toggle('hidden', v!=='aceptado');
+}
+
+function calcSug() {
+  var v = parseFloat(document.getElementById('aval').value)||0;
+  if(v) document.getElementById('asug').value = Math.round(v*0.97);
+}
+
+async function openModal(preContactId) {
+  eid=null; document.getElementById('mtit').textContent='Nueva tasación';
+  ['adir','anotes','arejreason','asug','aval','asup','aamb'].forEach(function(i){ document.getElementById(i).value=''; });
+  document.getElementById('afecha').value = hoy();
+  document.getElementById('aop').value = 'venta';
+  document.getElementById('aout').value = 'pendiente';
+  toggleOutcome();
+  var sel = document.getElementById('acont');
+  sel.innerHTML = '<option value="">Seleccionar contacto…</option>';
+  contacts.forEach(function(c){ sel.innerHTML += '<option value="'+c.id+'">'+c.name+'</option>'; });
+  if(preContactId) sel.value = preContactId;
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('modal').classList.add('hidden'); eid=null; }
+
+function editBtn(btn) { edit(btn.getAttribute('data-id')); }
+function edit(id) {
+  var a = all.find(function(x){ return x.id===id; }); if(!a) return;
+  eid=id; document.getElementById('mtit').textContent='Editar tasación';
+  document.getElementById('adir').value = a.address||'';
+  document.getElementById('aop').value  = a.operation_type||'venta';
+  document.getElementById('afecha').value = a.presented_date||hoy();
+  document.getElementById('asup').value = a.area_m2||'';
+  document.getElementById('aamb').value = a.rooms||'';
+  document.getElementById('aval').value = a.estimated_value_usd||'';
+  document.getElementById('asug').value = a.suggested_price_usd||'';
+  document.getElementById('aout').value = a.outcome||'pendiente';
+  document.getElementById('arejreason').value = a.rejection_reason||'';
+  document.getElementById('anotes').value = a.notes||'';
+  toggleOutcome();
+  var sel = document.getElementById('acont');
+  sel.innerHTML = '<option value="">Seleccionar contacto…</option>';
+  contacts.forEach(function(c){ sel.innerHTML += '<option value="'+c.id+'">'+c.name+'</option>'; });
+  sel.value = a.contact_id||'';
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+async function save() {
+  var contactId = document.getElementById('acont').value;
+  var addr = document.getElementById('adir').value.trim();
+  if(!contactId||!addr){ toast('Contacto y dirección son requeridos','error'); return; }
+  var btn = document.getElementById('bsave'); btn.disabled=true; btn.textContent='Guardando…';
+  var outcome = document.getElementById('aout').value;
+  var p = {
+    user_id:uid, contact_id:contactId,
+    address:addr, operation_type:document.getElementById('aop').value,
+    presented_date:document.getElementById('afecha').value,
+    area_m2:parseFloat(document.getElementById('asup').value)||null,
+    rooms:parseInt(document.getElementById('aamb').value)||null,
+    estimated_value_usd:parseFloat(document.getElementById('aval').value)||null,
+    suggested_price_usd:parseFloat(document.getElementById('asug').value)||null,
+    outcome:outcome,
+    rejection_reason:outcome==='rechazado'?(document.getElementById('arejreason').value.trim()||null):null,
+    notes:document.getElementById('anotes').value.trim()||null
+  };
+
+  var wasRejected = false, wasAccepted = false;
+  if(eid) {
+    var prev = all.find(function(a){ return a.id===eid; });
+    wasRejected = prev && prev.outcome!=='rechazado' && outcome==='rechazado';
+    wasAccepted = prev && prev.outcome!=='aceptado'  && outcome==='aceptado';
+    var r = await db.acms.update(eid, p);
+    if(r.error){ btn.disabled=false; btn.textContent='Guardar'; toast('Error: '+r.error.message,'error'); return; }
+  } else {
+    wasRejected = outcome==='rechazado';
+    wasAccepted = outcome==='aceptado';
+    var r2 = await db.acms.insert(p);
+    if(r2.error){ btn.disabled=false; btn.textContent='Guardar'; toast('Error: '+r2.error.message,'error'); return; }
+    eid = r2.data && r2.data.id;
+  }
+
+  // Crear evento en Calendar si es nueva presentación
+  if(!eid || wasRejected===false) {
+    if(CRM.googleAccessToken) {
+      var contact = contacts.find(function(c){ return c.id===contactId; });
+      calendarCreateEvent({
+        title:'Tasación: '+(contact&&contact.name||addr),
+        description:'Tasación presentada.\nDirección: '+addr+'\nLink CRM: '+window.location.origin+'/acm.html',
+        date:p.presented_date, duration_minutes:60, type:'tasacion'
+      });
+    }
+  }
+
+  // Procesar rechazo si corresponde
+  if(wasRejected && eid) {
+    var acmData = Object.assign({}, p, {id:eid, contact:{name:(contacts.find(function(c){return c.id===contactId;})||{}).name}});
+    await processRejection(acmData);
+  }
+
+  if(wasAccepted) {
+    toast('Tasación aceptada ✅ — avanzando a captación…');
+  } else if(!wasRejected) {
+    toast(eid?'ACM actualizado':'ACM creado');
+  }
+
+  btn.disabled=false; btn.textContent='Guardar';
+  closeModal(); await load();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RE/MAX — Finanzas</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div><div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div><div class="ph-title">💰 Finanzas</div><div class="ph-sub" id="fin-per"></div></div>
+    <div class="flex gap-sm" style="flex-wrap:wrap;align-items:center">
+      <select id="sm" onchange="load()" style="width:auto"><option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option><option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option><option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select>
+      <input id="sy" type="number" style="width:90px" onchange="load()">
+      <div style="display:flex;align-items:center;gap:6px;background:var(--blue-light);border-radius:6px;padding:4px 8px">
+        <span style="font-size:11px;color:var(--blue)">TC hoy:</span>
+        <input type="number" id="tc-val" placeholder="1000" style="width:80px;border:none;background:transparent;color:var(--blue);font-weight:500">
+        <button class="btn btn-sm" style="background:var(--blue);color:#fff;border-color:var(--blue)" onclick="saveTC()">Guardar</button>
+        <span id="tc-saved" style="font-size:11px;color:var(--blue)"></span>
+      </div>
+      <button class="btn btn-primary" onclick="openM('ingreso')">+ Ingreso</button>
+      <button class="btn" style="color:var(--red);border-color:var(--red-mid)" onclick="openM('gasto')">+ Gasto</button>
+    </div>
+  </div>
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi good"><div class="kpi-label">Ingresos ARS</div><div class="kpi-val" id="sum-i">$0</div></div>
+    <div class="kpi bad"><div class="kpi-label">Gastos ARS</div><div class="kpi-val" id="sum-e">$0</div></div>
+    <div class="kpi" id="sum-bc"><div class="kpi-label">Balance neto</div><div class="kpi-val" id="sum-b">$0</div></div>
+    <div class="kpi"><div class="kpi-label">Ingresos USD</div><div class="kpi-val" id="sum-usd" style="font-size:16px">USD 0</div><div class="kpi-sub">comisiones</div></div>
+  </div>
+  <div class="card">
+    <div class="tabs">
+      <button class="tab on" onclick="switchTab(this,'todos')">Todos</button>
+      <button class="tab" onclick="switchTab(this,'ingreso')">Ingresos</button>
+      <button class="tab" onclick="switchTab(this,'gasto')">Gastos</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Moneda</th><th>Tipo</th><th style="text-align:right">Monto ARS</th><th></th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+<div class="overlay hidden" id="modal">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title" id="mtit">Nuevo ingreso</div><button class="btn btn-sm" onclick="closeM()">✕</button></div>
+    <div class="modal-body">
+      <div class="fgrid">
+        <div class="frow"><label>Monto *</label><input id="ta" type="number" step="0.01" placeholder="0"></div>
+        <div class="frow"><label>Moneda</label><select id="tcurr" onchange="toggleCurr()"><option value="ars">ARS</option><option value="usd">USD</option></select></div>
+      </div>
+      <div class="frow hidden" id="tc-row"><label>Tipo de cambio</label><input id="ttc" type="number" placeholder="1000"></div>
+      <div class="frow"><label>Fecha</label><input id="td" type="date"></div>
+      <div class="frow"><label>Descripción</label><input id="tdes" placeholder="Descripción opcional"></div>
+      <div class="frow"><label>Categoría</label><select id="tcat"></select></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeM()">Cancelar</button>
+      <button class="btn btn-primary" id="bsave" onclick="saveTx()">Guardar</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid,allTx=[],curType='ingreso',curTab='todos';
+var IC={comision:'Comisión RE/MAX',honorarios:'Honorarios',alquiler_cobrado:'Alquiler cobrado',otro_ingreso:'Otro ingreso'};
+var EC={marketing:'Marketing',oficina:'Oficina',transporte:'Transporte',comidas:'Comidas',servicios:'Servicios',gym:'Gym/salud',personal:'Personal',impuestos:'Impuestos',otro_gasto:'Otro gasto'};
+var MN2=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+(async function(){
+  var r=await initPage('finanzas.html');if(!r)return;uid=r.user.id;
+  var now=new Date();document.getElementById('sm').value=now.getMonth()+1;document.getElementById('sy').value=now.getFullYear();document.getElementById('td').value=hoy();
+  var tcR=await db.exchangeRate.today(uid);if(tcR.data)document.getElementById('tc-saved').textContent='TC: '+tcR.data.rate;
+  await load();
+})();
+async function load(){
+  var m=document.getElementById('sm').value,y=document.getElementById('sy').value,mm=String(m).padStart(2,'0');
+  document.getElementById('fin-per').textContent=MN2[m]+' '+y;
+  var r=await db.transactions.list(uid,y+'-'+mm+'-01',y+'-'+mm+'-31');
+  allTx=r.data||[];
+  var inc=0,exp=0,usd=0;
+  allTx.forEach(function(t){
+    if(t.type==='ingreso'){inc+=Number(t.amount_ars);if(t.currency==='usd')usd+=Number(t.amount);}
+    else exp+=Number(t.amount_ars);
+  });
+  var bal=inc-exp;
+  document.getElementById('sum-i').textContent=fmt$(inc);
+  document.getElementById('sum-e').textContent=fmt$(exp);
+  document.getElementById('sum-b').textContent=fmt$(bal);
+  document.getElementById('sum-bc').className='kpi '+(bal>=0?'good':'bad');
+  document.getElementById('sum-usd').textContent=fmtU(usd);
+  render();
+}
+async function saveTC(){
+  var rate=parseFloat(document.getElementById('tc-val').value);if(!rate){toast('Ingresá el tipo de cambio','error');return;}
+  await db.exchangeRate.set(uid,rate);
+  document.getElementById('tc-saved').textContent='TC: '+rate;
+  toast('Tipo de cambio guardado');
+}
+function render(){
+  var list=curTab==='ingreso'?allTx.filter(function(t){return t.type==='ingreso';}):curTab==='gasto'?allTx.filter(function(t){return t.type==='gasto';}):allTx;
+  var tb=document.getElementById('tbody');
+  if(!list.length){tb.innerHTML='<tr><td colspan="7"><div class="empty">Sin transacciones.</div></td></tr>';return;}
+  var ALL_CATS=Object.assign({},IC,EC);
+  tb.innerHTML=list.map(function(t){
+    var isInc=t.type==='ingreso';
+    return'<tr><td style="color:var(--text3)">'+fd(t.date)+'</td><td>'+(t.description||'—')+'</td>'
+      +'<td><span class="badge badge-gray">'+(ALL_CATS[t.category]||t.category||'—')+'</span></td>'
+      +'<td><span class="badge '+(t.currency==='usd'?'badge-blue':'badge-gray')+'">'+(t.currency||'ars').toUpperCase()+'</span></td>'
+      +'<td><span class="badge '+(isInc?'badge-green':'badge-red')+'">'+(isInc?'Ingreso':'Gasto')+'</span></td>'
+      +'<td style="text-align:right;font-weight:600;color:'+(isInc?'var(--green)':'var(--red)')+'">'+(isInc?'+':'-')+fmt$(t.amount_ars)+'</td>'
+      +'<td><button class="btn btn-sm" style="color:var(--red)" data-id="'+t.id+'" onclick="delBtn(this)">✕</button></td></tr>';
+  }).join('');
+}
+function delBtn(btn){del(btn.getAttribute('data-id'));}
+function switchTab(btn,t){curTab=t;document.querySelectorAll('.tab').forEach(function(b){b.classList.remove('on');});btn.classList.add('on');render();}
+function openM(type){
+  curType=type;document.getElementById('mtit').textContent=type==='ingreso'?'Nuevo ingreso':'Nuevo gasto';
+  document.getElementById('ta').value='';document.getElementById('tdes').value='';document.getElementById('td').value=hoy();
+  document.getElementById('tcurr').value='ars';document.getElementById('tc-row').classList.add('hidden');
+  var cats=type==='ingreso'?IC:EC,opts='';for(var k in cats)opts+='<option value="'+k+'">'+cats[k]+'</option>';
+  document.getElementById('tcat').innerHTML=opts;document.getElementById('modal').classList.remove('hidden');
+}
+function closeM(){document.getElementById('modal').classList.add('hidden');}
+function toggleCurr(){var isUSD=document.getElementById('tcurr').value==='usd';document.getElementById('tc-row').classList.toggle('hidden',!isUSD);}
+async function saveTx(){
+  var amt=parseFloat(document.getElementById('ta').value);if(!amt||amt<=0){toast('Monto inválido','error');return;}
+  var curr=document.getElementById('tcurr').value;
+  var tc=parseFloat(document.getElementById('ttc').value)||null;
+  var amtARS=curr==='usd'?(tc?amt*tc:amt):amt;
+  var btn=document.getElementById('bsave');btn.disabled=true;btn.textContent='Guardando…';
+  var r=await db.transactions.insert({user_id:uid,type:curType,currency:curr,amount:amt,exchange_rate:tc,amount_ars:amtARS,date:document.getElementById('td').value,description:document.getElementById('tdes').value.trim()||null,category:document.getElementById('tcat').value});
+  btn.disabled=false;btn.textContent='Guardar';
+  if(r.error){toast('Error','error');return;}
+  toast(curType==='ingreso'?'Ingreso registrado':'Gasto registrado');closeM();await load();
+}
+async function del(id){if(!confirm('¿Eliminar?'))return;await db.transactions.delete(id);toast('Eliminado');await load();}
+</script>
+</body>
+</html>

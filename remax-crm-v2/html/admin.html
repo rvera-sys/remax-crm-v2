@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RE/MAX — Administración</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div><div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph"><div><div class="ph-title">⚙️ Administración</div><div class="ph-sub">Usuarios, roles y metas</div></div></div>
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi"><div class="kpi-label">Total usuarios</div><div class="kpi-val" id="k-total">—</div></div>
+    <div class="kpi"><div class="kpi-label">Brokers</div><div class="kpi-val" id="k-broker">—</div></div>
+    <div class="kpi"><div class="kpi-label">Agentes</div><div class="kpi-val" id="k-agent">—</div></div>
+    <div class="kpi good"><div class="kpi-label">Operaciones totales</div><div class="kpi-val" id="k-ops">—</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+    <div class="card"><div class="flex-between mb-2"><div class="card-title" style="margin:0">👑 Brokers</div></div><div id="brokersList"></div></div>
+    <div class="card"><div class="flex-between mb-2"><div class="card-title" style="margin:0">👤 Agentes</div></div><div id="agentesList"></div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">🎯 Metas mensuales por agente</div>
+    <div class="flex gap-sm" style="margin-bottom:.85rem">
+      <select id="agSelect" style="flex:1" onchange="loadGoals()"><option value="">Seleccionar agente…</option></select>
+    </div>
+    <div id="goals-form" class="hidden">
+      <div class="fgrid">
+        <div class="frow"><label>Contactos</label><input id="g-con" type="number" placeholder="100"></div>
+        <div class="frow"><label>Tasaciones</label><input id="g-tas" type="number" placeholder="4"></div>
+        <div class="frow"><label>Captaciones</label><input id="g-cap" type="number" placeholder="2"></div>
+        <div class="frow"><label>Visitas</label><input id="g-vis" type="number" placeholder="20"></div>
+        <div class="frow"><label>Cierres</label><input id="g-cie" type="number" placeholder="1"></div>
+      </div>
+      <button class="btn btn-primary" onclick="saveGoals()">💾 Guardar metas</button>
+    </div>
+  </div>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid,allUsers=[];
+(async function(){var r=await initPage('admin.html');if(!r)return;if(r.user.role!=='broker'){window.location.replace('dashboard.html');return;}uid=r.user.id;await load();})();
+async function load(){
+  var[ur,opR]=await Promise.all([db.users.all(),sb.from('operations').select('id',{count:'exact',head:true}).is('deleted_at',null)]);
+  allUsers=ur.data||[];
+  var brokers=allUsers.filter(function(u){return u.role==='broker';}),agents=allUsers.filter(function(u){return u.role==='agent';});
+  document.getElementById('k-total').textContent=allUsers.length;
+  document.getElementById('k-broker').textContent=brokers.length;
+  document.getElementById('k-agent').textContent=agents.length;
+  document.getElementById('k-ops').textContent=opR.count||0;
+  renderUsers('brokersList',brokers,'broker');
+  renderUsers('agentesList',agents,'agent');
+  var sel=document.getElementById('agSelect');sel.innerHTML='<option value="">Seleccionar agente…</option>';
+  agents.forEach(function(u){sel.innerHTML+='<option value="'+u.id+'">'+u.name+'</option>';});
+}
+function renderUsers(cId,users,role){
+  var el=document.getElementById(cId);
+  if(!users.length){el.innerHTML='<div class="muted" style="padding:.75rem 0">Sin '+(role==='broker'?'brokers':'agentes')+'.</div>';return;}
+  el.innerHTML=users.map(function(u){
+    var av=u.avatar_url?'<img src="'+u.avatar_url+'" style="width:28px;height:28px;border-radius:50%;object-fit:cover;" referrerpolicy="no-referrer">':'<div class="avatar avatar-sm">'+ini(u.name)+'</div>';
+    var btn=role==='broker'
+      ?'<button class="btn btn-sm" style="color:var(--red);border-color:var(--red-mid)" onclick="changeRole(\''+u.id+'\',\'agent\')">→ Agente</button>'
+      :'<button class="btn btn-sm btn-primary" onclick="changeRole(\''+u.id+'\',\'broker\')">→ Broker</button>';
+    return'<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--border2)"><div style="display:flex;align-items:center;gap:8px">'+av+'<div><div style="font-size:13px;font-weight:500">'+u.name+'</div><div style="font-size:11px;color:var(--text3)">'+u.email+'</div></div></div>'+btn+'</div>';
+  }).join('');
+}
+async function changeRole(userId,newRole){
+  if(!confirm('¿Cambiar rol a '+(newRole==='broker'?'Broker':'Agente')+'?'))return;
+  var r=await db.users.update(userId,{role:newRole});
+  if(r.error){toast('Error: '+r.error.message,'error');return;}
+  toast('Rol actualizado');await load();
+}
+async function loadGoals(){
+  var id=document.getElementById('agSelect').value;
+  if(!id){document.getElementById('goals-form').classList.add('hidden');return;}
+  var u=allUsers.find(function(u2){return u2.id===id;});
+  var g=(u&&u.settings&&u.settings.monthly_goals)||{};
+  document.getElementById('g-con').value=g.contacts||100;
+  document.getElementById('g-tas').value=g.tasaciones||4;
+  document.getElementById('g-cap').value=g.captaciones||2;
+  document.getElementById('g-vis').value=g.visitas||20;
+  document.getElementById('g-cie').value=g.cierres||1;
+  document.getElementById('goals-form').classList.remove('hidden');
+}
+async function saveGoals(){
+  var id=document.getElementById('agSelect').value;if(!id)return;
+  var u=allUsers.find(function(u2){return u2.id===id;});
+  var settings=Object.assign({},(u&&u.settings)||{},{monthly_goals:{contacts:parseInt(document.getElementById('g-con').value)||100,tasaciones:parseInt(document.getElementById('g-tas').value)||4,captaciones:parseInt(document.getElementById('g-cap').value)||2,visitas:parseInt(document.getElementById('g-vis').value)||20,cierres:parseInt(document.getElementById('g-cie').value)||1}});
+  var r=await db.users.update(id,{settings:settings});
+  if(r.error){toast('Error','error');return;}
+  toast('Metas guardadas');await load();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#cc0000">
+<title>RE/MAX — Propiedades</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div>
+<div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div><div class="ph-title">🏡 Propiedades</div><div class="ph-sub" id="prop-sub"></div></div>
+  </div>
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi"><div class="kpi-label">En venta</div><div class="kpi-val" id="k-venta">—</div></div>
+    <div class="kpi"><div class="kpi-label">En alquiler</div><div class="kpi-val" id="k-alq">—</div></div>
+    <div class="kpi good"><div class="kpi-label">Cerradas</div><div class="kpi-val" id="k-closed">—</div></div>
+    <div class="kpi good"><div class="kpi-label">Valor cartera</div><div class="kpi-val" id="k-val" style="font-size:14px">—</div><div class="kpi-sub">USD activas</div></div>
+  </div>
+  <div class="card" style="margin-bottom:1rem">
+    <div class="flex gap-sm" style="flex-wrap:wrap">
+      <input type="search" id="q" placeholder="Buscar dirección, zona…" style="flex:1;min-width:180px" oninput="doFilter()">
+      <select id="fop" onchange="doFilter()" style="width:auto"><option value="">Venta y alquiler</option><option value="venta">Venta</option><option value="alquiler">Alquiler</option></select>
+      <select id="fst" onchange="doFilter()" style="width:auto"><option value="">Todos los estados</option><option value="activa">Activa</option><option value="vendida">Vendida</option><option value="alquilada">Alquilada</option><option value="baja">Baja</option></select>
+    </div>
+  </div>
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Dirección</th><th>Tipo</th><th>Operación</th><th>Precio USD</th><th>Propietario</th><th>Publicación</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+<div class="overlay hidden" id="modal">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-head"><div class="modal-title" id="mtit">Editar propiedad</div><button class="btn btn-sm" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="frow"><label>Dirección *</label><input id="pdir" placeholder="Av. Corrientes 1234, CABA"></div>
+      <div class="fgrid">
+        <div class="frow"><label>Tipo</label><select id="ptipo"><option value="departamento">Departamento</option><option value="casa">Casa</option><option value="ph">PH</option><option value="local">Local</option><option value="oficina">Oficina</option><option value="terreno">Terreno</option><option value="otro">Otro</option></select></div>
+        <div class="frow"><label>Estado</label><select id="pst"><option value="activa">Activa</option><option value="vendida">Vendida</option><option value="alquilada">Alquilada</option><option value="baja">Baja</option></select></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>Precio USD</label><input id="pprecio" type="number" placeholder="150000"></div>
+        <div class="frow"><label>Superficie m²</label><input id="psup" type="number" placeholder="70"></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>Ambientes</label><input id="pamb" type="number" placeholder="3"></div>
+        <div class="frow"><label>Baños</label><input id="pbanos" type="number" placeholder="2"></div>
+      </div>
+      <div class="frow"><label>Descripción</label><textarea id="pdesc" placeholder="Características, estado, luminosidad…"></textarea></div>
+      <div class="frow"><label>Link portal (MercadoLibre, ZonaProp, etc.)</label><input id="plink" type="url" placeholder="https://…"></div>
+      <div class="frow"><label>Link carpeta Google Drive (docs/fotos)</label><input id="pdrive" type="url" placeholder="https://drive.google.com/…"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="bsave" onclick="save()">Guardar</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid, all=[], eid=null;
+var TIPO={departamento:'Depto.',casa:'Casa',ph:'PH',local:'Local',oficina:'Oficina',terreno:'Terreno',otro:'Otro'};
+var ST={activa:'badge-blue',vendida:'badge-green',alquilada:'badge-amber',baja:'badge-gray'};
+var STL={activa:'Activa',vendida:'Vendida',alquilada:'Alquilada',baja:'Baja'};
+(async function(){var r=await initPage('propiedades.html');if(!r)return;uid=r.user.id;await load();})();
+async function load(){
+  var r=await db.properties.list({user_id:uid});all=r.data||[];
+  document.getElementById('prop-sub').textContent=all.length+' propiedad'+(all.length!==1?'es':'');
+  document.getElementById('k-venta').textContent=all.filter(function(p){return p.status==='activa'&&p.operation_type==='venta';}).length;
+  document.getElementById('k-alq').textContent=all.filter(function(p){return p.status==='activa'&&p.operation_type==='alquiler';}).length;
+  document.getElementById('k-closed').textContent=all.filter(function(p){return p.status==='vendida'||p.status==='alquilada';}).length;
+  var tv=all.filter(function(p){return p.status==='activa';}).reduce(function(s,p){return s+Number(p.price_usd||0);},0);
+  document.getElementById('k-val').textContent=fmtU(tv);
+  render(all);
+}
+function render(list){
+  var tb=document.getElementById('tbody');
+  if(!list.length){tb.innerHTML='<tr><td colspan="8"><div class="empty">Sin propiedades.<br><small>Las propiedades se crean desde una operación al llegar a la etapa de Captación.</small></div></td></tr>';return;}
+  tb.innerHTML=list.map(function(p){
+    var c=p.contact||{},op=p.operation||{};
+    var waNum=c.phone?'54'+c.phone.replace(/\D/g,''):'';
+    return'<tr>'
+      +'<td><div style="font-weight:500">'+p.address+'</div>'+(p.area_m2?'<div style="font-size:11px;color:var(--text3)">'+p.area_m2+' m² · '+(p.rooms||'—')+' amb.</div>':'')+'</td>'
+      +'<td><span class="badge badge-gray">'+(TIPO[p.type]||p.type||'—')+'</span></td>'
+      +'<td><span class="badge '+(p.operation_type==='venta'?'badge-blue':'badge-green')+'">'+(p.operation_type==='venta'?'Venta':'Alquiler')+'</span></td>'
+      +'<td style="font-weight:500">'+fmtU(p.price_usd||0)+'</td>'
+      +'<td>'+(c.name||'—')+(waNum?'<div><a href="https://wa.me/'+waNum+'" target="_blank" style="font-size:10px;color:#25D366">WhatsApp</a></div>':'')+'</td>'
+      +'<td>'+(p.portal_links&&p.portal_links.length?p.portal_links.map(function(l){return'<a href="'+l.url+'" target="_blank" class="btn btn-sm" style="font-size:10px">'+l.portal+'</a>';}).join(' '):'—')+(p.docs_url?'<div><a href="'+p.docs_url+'" target="_blank" style="font-size:10px;color:var(--blue)">📁 Drive</a></div>':'')+'</td>'
+      +'<td><span class="badge '+(ST[p.status]||'badge-gray')+'">'+(STL[p.status]||p.status)+'</span></td>'
+      +'<td><button class="btn btn-sm" data-id="'+p.id+'" onclick="editBtn(this)">Editar</button></td></tr>';
+  }).join('');
+}
+function doFilter(){var q=document.getElementById('q').value.toLowerCase(),op=document.getElementById('fop').value,st=document.getElementById('fst').value;render(all.filter(function(p){return(!q||(p.address||'').toLowerCase().includes(q))&&(!op||p.operation_type===op)&&(!st||p.status===st);}));}
+function editBtn(btn){edit(btn.getAttribute('data-id'));}
+function edit(id){
+  var p=all.find(function(x){return x.id===id;});if(!p)return;eid=id;
+  document.getElementById('mtit').textContent='Editar propiedad';
+  document.getElementById('pdir').value=p.address||'';
+  document.getElementById('ptipo').value=p.type||'departamento';
+  document.getElementById('pst').value=p.status||'activa';
+  document.getElementById('pprecio').value=p.price_usd||'';
+  document.getElementById('psup').value=p.area_m2||'';
+  document.getElementById('pamb').value=p.rooms||'';
+  document.getElementById('pbanos').value=p.bathrooms||'';
+  document.getElementById('pdesc').value=p.description||'';
+  document.getElementById('plink').value=(p.portal_links&&p.portal_links[0]&&p.portal_links[0].url)||'';
+  document.getElementById('pdrive').value=p.docs_url||'';
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal(){document.getElementById('modal').classList.add('hidden');eid=null;}
+async function save(){
+  if(!eid)return;
+  var addr=document.getElementById('pdir').value.trim();if(!addr){toast('Dirección requerida','error');return;}
+  var btn=document.getElementById('bsave');btn.disabled=true;btn.textContent='Guardando…';
+  var link=document.getElementById('plink').value.trim();
+  var r=await db.properties.update(eid,{address:addr,type:document.getElementById('ptipo').value,status:document.getElementById('pst').value,price_usd:parseFloat(document.getElementById('pprecio').value)||null,area_m2:parseFloat(document.getElementById('psup').value)||null,rooms:parseInt(document.getElementById('pamb').value)||null,bathrooms:parseInt(document.getElementById('pbanos').value)||null,description:document.getElementById('pdesc').value.trim()||null,portal_links:link?[{portal:'Portal',url:link}]:[],docs_url:document.getElementById('pdrive').value.trim()||null});
+  btn.disabled=false;btn.textContent='Guardar';
+  if(r.error){toast('Error: '+r.error.message,'error');return;}
+  toast('Propiedad actualizada');closeModal();await load();
+}
+</script>
+</body>
+</html>

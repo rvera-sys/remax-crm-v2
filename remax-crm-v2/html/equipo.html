@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RE/MAX — Mi Equipo</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div><div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div><div class="ph-title">👥 Mi Equipo</div><div class="ph-sub" id="eq-sub"></div></div>
+    <div class="flex gap-sm" style="align-items:center">
+      <select id="sm" onchange="load()" style="width:auto"><option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option><option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option><option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select>
+      <input id="sy" type="number" style="width:90px" onchange="load()">
+    </div>
+  </div>
+  <div id="alerts-eq" style="margin-bottom:.75rem"></div>
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi"><div class="kpi-label">Agentes</div><div class="kpi-val" id="k-ag">—</div></div>
+    <div class="kpi good"><div class="kpi-label">En meta</div><div class="kpi-val" id="k-meta">—</div><div class="kpi-sub">≥80%</div></div>
+    <div class="kpi warn"><div class="kpi-label">En riesgo</div><div class="kpi-val" id="k-risk">—</div><div class="kpi-sub">50–79%</div></div>
+    <div class="kpi bad"><div class="kpi-label">Déficit</div><div class="kpi-val" id="k-def">—</div><div class="kpi-sub">&lt;50%</div></div>
+  </div>
+  <div id="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:1rem"></div>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid;
+(async function(){var r=await initPage('equipo.html');if(!r)return;if(r.user.role!=='broker'){window.location.replace('dashboard.html');return;}uid=r.user.id;var now=new Date();document.getElementById('sm').value=now.getMonth()+1;document.getElementById('sy').value=now.getFullYear();await load();})();
+async function load(){
+  var month=parseInt(document.getElementById('sm').value),year=parseInt(document.getElementById('sy').value);
+  var mm=String(month).padStart(2,'0');
+  var MN2=['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('eq-sub').textContent='Rendimiento '+MN2[month]+' '+year;
+  var agR=await db.users.agents();
+  if(!agR.data||!agR.data.length){document.getElementById('grid').innerHTML='<div class="empty">Sin agentes en el equipo.</div>';return;}
+  var data=await Promise.all(agR.data.map(async function(ag){
+    var [wt,txR,capR]=await Promise.all([
+      db.tracking.get(ag.id,year,getISOWeekApprox(year,month)),
+      sb.from('transactions').select('type,amount_ars').eq('user_id',ag.id).gte('date',year+'-'+mm+'-01').lte('date',year+'-'+mm+'-31'),
+      sb.from('operations').select('id',{count:'exact',head:true}).eq('user_id',ag.id).is('deleted_at',null)
+    ]);
+    var t=(wt.data&&wt.data.weekly_totals)||{};
+    var g=(ag.settings&&ag.settings.monthly_goals)||{};
+    var txAll=txR.data||[];
+    var inc=txAll.filter(function(x){return x.type==='ingreso';}).reduce(function(s,x){return s+Number(x.amount_ars);},0);
+    var exp=txAll.filter(function(x){return x.type==='gasto';}).reduce(function(s,x){return s+Number(x.amount_ars);},0);
+    var perf=agentPerformanceStatus({contactos:t.contacts_worked||0,tasaciones:t.appraisals||0,captaciones:t.captures||0,cierres:t.closed_sales||0,visitas:t.sale_visits||0},g);
+    return{ag:ag,t:t,g:g,perf:perf,inc:inc,exp:exp,caps:capR.count||0};
+  }));
+  document.getElementById('k-ag').textContent=data.length;
+  document.getElementById('k-meta').textContent=data.filter(function(d){return d.perf.avg>=80;}).length;
+  document.getElementById('k-risk').textContent=data.filter(function(d){return d.perf.avg>=50&&d.perf.avg<80;}).length;
+  document.getElementById('k-def').textContent=data.filter(function(d){return d.perf.avg<50;}).length;
+  var deficit=data.filter(function(d){return d.perf.avg<50;});
+  document.getElementById('alerts-eq').innerHTML=deficit.length
+    ?'<div class="alert-box alert-red">⚠️ En déficit: <strong>'+deficit.map(function(d){return d.ag.name;}).join(', ')+'</strong></div>':'';
+  data.sort(function(a,b){return b.perf.avg-a.perf.avg;});
+  document.getElementById('grid').innerHTML=data.map(function(d){
+    var ag=d.ag,perf=d.perf;
+    var semCls={over:'sem-blue',good:'sem-green',warn:'sem-amber',bad:'sem-red'}[perf.status];
+    var cols=perf.metrics.map(function(m){var p=pct(m.val,m.goal),c=p>=80?'var(--green)':p>=50?'var(--amber)':'var(--red)';return'<div style="text-align:center;background:var(--surface2);border-radius:6px;padding:6px 2px"><div style="font-size:9px;color:var(--text3)">'+m.label+'</div><div style="font-size:14px;font-weight:600;color:'+c+'">'+m.val+'</div><div style="font-size:9px;color:var(--text3)">/ '+m.goal+'</div></div>';}).join('');
+    var avImg=ag.avatar_url?'<img src="'+ag.avatar_url+'" style="width:34px;height:34px;border-radius:50%;object-fit:cover;" referrerpolicy="no-referrer">':'<div class="avatar avatar-sm">'+ini(ag.name)+'</div>';
+    return'<div class="card" style="cursor:pointer" onclick="window.location=\'admin.html\'">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem"><div style="display:flex;align-items:center;gap:8px"><div class="semaforo '+semCls+'"></div>'+avImg+'<div><div style="font-weight:500;font-size:13px">'+ag.name+'</div><div style="font-size:11px;color:var(--text3)">'+perf.message+' · '+perf.avg+'%</div></div></div></div>'
+      +'<div class="perf-bar" style="margin-bottom:.65rem"><div class="perf-fill" style="width:'+Math.min(perf.avg,100)+'%;background:'+perf.color+'"></div></div>'
+      +'<div style="font-size:11px;color:var(--blue);margin-bottom:.65rem">'+perf.suggestion+'</div>'
+      +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:.65rem">'+cols+'</div>'
+      +'<div style="border-top:0.5px solid var(--border2);padding-top:.6rem;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center">'
+      +'<div><div style="font-size:9px;color:var(--green);font-weight:600">INGRESOS</div><div style="font-size:12px;font-weight:600">'+fmt$(d.inc)+'</div></div>'
+      +'<div><div style="font-size:9px;color:var(--red);font-weight:600">GASTOS</div><div style="font-size:12px;font-weight:600">'+fmt$(d.exp)+'</div></div>'
+      +'<div><div style="font-size:9px;color:var(--text3);font-weight:600">OPS</div><div style="font-size:12px;font-weight:600">'+d.caps+'</div></div>'
+      +'</div></div>';
+  }).join('');
+}
+function getISOWeekApprox(year,month){var d=new Date(year,month-1,15);d.setDate(d.getDate()+3-(d.getDay()+6)%7);var week1=new Date(d.getFullYear(),0,4);return 1+Math.round(((d-week1)/86400000-3+(week1.getDay()+6)%7)/7);}
+</script>
+</body>
+</html>

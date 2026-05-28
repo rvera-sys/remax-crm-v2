@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RE/MAX — Calendario</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div><div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div><div class="ph-title">📅 Calendario</div><div class="ph-sub" id="cal-label"></div></div>
+    <div class="flex gap-sm">
+      <button class="btn" onclick="changeMonth(-1)">← Ant.</button>
+      <button class="btn" onclick="goToday()">Hoy</button>
+      <button class="btn" onclick="changeMonth(1)">Sig. →</button>
+    </div>
+  </div>
+  <!-- Alertas -->
+  <div id="notif-box" style="display:none;margin-bottom:1rem"></div>
+  <!-- Calendario -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="cal-grid" style="margin-bottom:8px" id="cal-heads"></div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+  <!-- Leyenda -->
+  <div class="card">
+    <div class="card-title">Leyenda</div>
+    <div class="flex gap-sm" style="flex-wrap:wrap">
+      <div class="flex gap-sm" style="align-items:center"><div class="cal-ev ev-reunion" style="font-size:9px;padding:1px 5px">Reunión</div><span class="muted">Reunión / Pre-listing</span></div>
+      <div class="flex gap-sm" style="align-items:center"><div class="cal-ev ev-nurturing" style="font-size:9px;padding:1px 5px">Nurturing</div><span class="muted">Toque nurturing</span></div>
+      <div class="flex gap-sm" style="align-items:center"><div class="cal-ev ev-postventa" style="font-size:9px;padding:1px 5px">Post-venta</div><span class="muted">Post-venta 3×3×1</span></div>
+      <div class="flex gap-sm" style="align-items:center"><div class="cal-ev ev-operacion" style="font-size:9px;padding:1px 5px">Cierre</div><span class="muted">Boleto / Escritura</span></div>
+      <div class="flex gap-sm" style="align-items:center"><div class="cal-ev ev-cumple" style="font-size:9px;padding:1px 5px">Cumple</div><span class="muted">Cumpleaños</span></div>
+    </div>
+  </div>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid,curYear,curMonth,allEvents={};
+var DAYS=['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+(async function(){
+  var r=await initPage('calendario.html');if(!r)return;uid=r.user.id;
+  var now=new Date();curYear=now.getFullYear();curMonth=now.getMonth();
+  document.getElementById('cal-heads').innerHTML=DAYS.map(function(d){return'<div class="cal-head">'+d+'</div>';}).join('');
+  await loadEvents();renderCal();checkNotifs();
+})();
+function goToday(){var now=new Date();curYear=now.getFullYear();curMonth=now.getMonth();renderCal();}
+function changeMonth(d){curMonth+=d;if(curMonth<0){curMonth=11;curYear--;}if(curMonth>11){curMonth=0;curYear++;}renderCal();}
+function addEv(ds,cls,text){if(!allEvents[ds])allEvents[ds]=[];allEvents[ds].push({cls:cls,text:text});}
+async function loadEvents(){
+  allEvents={};
+  var [conR,nurtR,psR,opR]=await Promise.all([
+    sb.from('contacts').select('name,birthday,next_action_date').eq('user_id',uid).is('deleted_at',null),
+    sb.from('nurturing_followups').select('scheduled_date,stage,contact:contacts(name)').eq('user_id',uid).is('completed_at',null),
+    sb.from('post_sale_followups').select('scheduled_date,stage,contact:contacts(name)').eq('user_id',uid).is('completed_at',null),
+    sb.from('operations').select('stage_date,stage,seller:contacts!seller_contact_id(name)').eq('user_id',uid).is('deleted_at',null)
+  ]);
+  (conR.data||[]).forEach(function(c){
+    if(c.birthday){var bp=c.birthday.split('-');if(bp.length===3){var bd=curYear+'-'+bp[1]+'-'+bp[2];addEv(bd,'ev-cumple','🎂 '+c.name.split(' ')[0]);}}
+    if(c.next_action_date)addEv(c.next_action_date,'ev-seguimiento','📞 '+c.name.split(' ')[0]);
+  });
+  (nurtR.data||[]).forEach(function(n){var c=n.contact||{};addEv(n.scheduled_date,'ev-nurturing','🔄 '+(c.name||'').split(' ')[0]);});
+  (psR.data||[]).forEach(function(p){var c=p.contact||{};addEv(p.scheduled_date,'ev-postventa','❤️ '+(c.name||'').split(' ')[0]);});
+  (opR.data||[]).forEach(function(o){
+    if(['boleto','escritura','contrato'].includes(o.stage)){var s=o.seller||{};addEv(o.stage_date,'ev-operacion','🏠 '+(s.name||'').split(' ')[0]);}
+  });
+}
+function renderCal(){
+  document.getElementById('cal-label').textContent=MN[curMonth]+' '+curYear;
+  var first=new Date(curYear,curMonth,1),last=new Date(curYear,curMonth+1,0);
+  var startDow=(first.getDay()+6)%7,today=hoy();
+  var html='';
+  for(var i=0;i<startDow;i++)html+='<div class="cal-day other"></div>';
+  for(var d=1;d<=last.getDate();d++){
+    var ds=curYear+'-'+String(curMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    var isT=ds===today;
+    var evs=(allEvents[ds]||[]).slice(0,3).map(function(e){return'<div class="cal-ev '+e.cls+'">'+e.text+'</div>';}).join('');
+    html+='<div class="cal-day'+(isT?' today':'')+'"><div class="cal-num">'+d+'</div>'+evs+'</div>';
+  }
+  var rem=(7-(startDow+last.getDate())%7)%7;
+  for(var i=0;i<rem;i++)html+='<div class="cal-day other"></div>';
+  document.getElementById('calGrid').innerHTML=html;
+}
+function checkNotifs(){
+  var today=new Date(),notifs=[];
+  Object.keys(allEvents).forEach(function(ds){
+    var d=new Date(ds+'T00:00:00');
+    var diff=Math.ceil((d-today)/86400000);
+    if(diff<=0&&diff>=-1){
+      (allEvents[ds]||[]).forEach(function(e){
+        if(diff===0)notifs.push({text:e.text+' — HOY',color:'var(--red)'});
+        else notifs.push({text:e.text+' — AYER (vencido)',color:'var(--amber)'});
+      });
+    } else if(diff===1||(diff===3&&allEvents[ds].some(function(e){return e.cls==='ev-cumple';}))) {
+      (allEvents[ds]||[]).forEach(function(e){notifs.push({text:e.text+' — '+(diff===1?'mañana':'en 3 días'),color:'var(--amber)'}); });
+    }
+  });
+  if(notifs.length){
+    document.getElementById('notif-box').style.display='';
+    document.getElementById('notif-box').innerHTML=notifs.map(function(n){
+      return'<div style="padding:.5rem .75rem;border-radius:6px;background:var(--amber-light);border:0.5px solid #f5c97a;margin-bottom:5px;font-size:12px;color:'+n.color+';font-weight:500">'+n.text+'</div>';
+    }).join('');
+  }
+}
+</script>
+</body>
+</html>

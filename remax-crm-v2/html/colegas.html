@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RE/MAX — Colegas</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div><div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div><div class="ph-title">🤝 Colegas</div><div class="ph-sub" id="col-sub"></div></div>
+    <button class="btn btn-primary" onclick="openModal()">+ Nuevo colega</button>
+  </div>
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Nombre</th><th>Inmobiliaria</th><th>Tipo</th><th>Teléfono</th><th>Email</th><th>Operaciones</th><th></th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+<div class="overlay hidden" id="modal">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title" id="mtit">Nuevo colega</div><button class="btn btn-sm" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="frow"><label>Nombre *</label><input id="cn" placeholder="Juan García"></div>
+      <div class="fgrid">
+        <div class="frow"><label>Inmobiliaria</label><input id="cag" placeholder="RE/MAX Premium"></div>
+        <div class="frow"><label>Tipo</label><select id="ctype"><option value="remax">RE/MAX</option><option value="externa">Inmobiliaria externa</option></select></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>Teléfono</label><input id="cph" type="tel" placeholder="11-1234-5678"></div>
+        <div class="frow"><label>Email</label><input id="cem" type="email" placeholder="colega@email.com"></div>
+      </div>
+      <div class="frow"><label>Notas</label><textarea id="cno" placeholder="Zona que trabaja, especialidad…"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="bsave" onclick="save()">Guardar</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid,all=[],eid=null;
+(async function(){var r=await initPage('colegas.html');if(!r)return;uid=r.user.id;await load();})();
+async function load(){
+  var r=await db.colleagues.list(uid);all=r.data||[];
+  document.getElementById('col-sub').textContent=all.length+' colega'+(all.length!==1?'s':'');
+  // contar operaciones por colega
+  var opR=await sb.from('operations').select('buyer_colleague_id').eq('user_id',uid).is('deleted_at',null);
+  var opCount={};(opR.data||[]).forEach(function(o){if(o.buyer_colleague_id)opCount[o.buyer_colleague_id]=(opCount[o.buyer_colleague_id]||0)+1;});
+  var tb=document.getElementById('tbody');
+  if(!all.length){tb.innerHTML='<tr><td colspan="7"><div class="empty">Sin colegas registrados.</div></td></tr>';return;}
+  tb.innerHTML=all.map(function(c){
+    var n=opCount[c.id]||0;
+    var waNum=c.phone?'54'+c.phone.replace(/\D/g,''):'';
+    return'<tr>'
+      +'<td><div style="display:flex;align-items:center;gap:8px"><div class="avatar avatar-sm">'+ini(c.name)+'</div><div style="font-weight:500">'+c.name+'</div></div></td>'
+      +'<td style="color:var(--text2)">'+(c.agency_name||'—')+'</td>'
+      +'<td><span class="badge '+(c.agency_type==='remax'?'badge-red':'badge-gray')+'">'+(c.agency_type==='remax'?'RE/MAX':'Externa')+'</span></td>'
+      +'<td>'+(c.phone||'—')+(waNum?'<div><a href="https://wa.me/'+waNum+'" target="_blank" style="font-size:10px;color:#25D366">WhatsApp</a></div>':'')+'</td>'
+      +'<td style="color:var(--text2)">'+(c.email||'—')+'</td>'
+      +'<td style="color:var(--blue);font-weight:500">'+n+' op'+(n!==1?'s':'')+'</td>'
+      +'<td><button class="btn btn-sm" data-id="'+c.id+'" onclick="editBtn(this)">Editar</button></td></tr>';
+  }).join('');
+}
+function editBtn(btn){edit(btn.getAttribute('data-id'));}
+function openModal(){eid=null;document.getElementById('mtit').textContent='Nuevo colega';['cn','cag','cph','cem','cno'].forEach(function(i){document.getElementById(i).value='';});document.getElementById('ctype').value='externa';document.getElementById('modal').classList.remove('hidden');}
+function closeModal(){document.getElementById('modal').classList.add('hidden');eid=null;}
+function edit(id){var c=all.find(function(x){return x.id===id;});if(!c)return;eid=id;document.getElementById('mtit').textContent='Editar colega';document.getElementById('cn').value=c.name||'';document.getElementById('cag').value=c.agency_name||'';document.getElementById('ctype').value=c.agency_type||'externa';document.getElementById('cph').value=c.phone||'';document.getElementById('cem').value=c.email||'';document.getElementById('cno').value=c.notes||'';document.getElementById('modal').classList.remove('hidden');}
+async function save(){
+  var name=document.getElementById('cn').value.trim();if(!name){toast('Nombre requerido','error');return;}
+  var btn=document.getElementById('bsave');btn.disabled=true;btn.textContent='Guardando…';
+  var p={user_id:uid,name:name,agency_name:document.getElementById('cag').value.trim()||null,agency_type:document.getElementById('ctype').value,phone:document.getElementById('cph').value.trim()||null,email:document.getElementById('cem').value.trim()||null,notes:document.getElementById('cno').value.trim()||null};
+  var r=eid?await db.colleagues.update(eid,p):await db.colleagues.insert(p);
+  btn.disabled=false;btn.textContent='Guardar';
+  if(r.error){toast('Error: '+r.error.message,'error');return;}
+  toast(eid?'Colega actualizado':'Colega creado');closeModal();await load();
+}
+</script>
+</body>
+</html>

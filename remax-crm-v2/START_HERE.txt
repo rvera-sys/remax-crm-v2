@@ -1,0 +1,170 @@
+🎯 **START HERE - EMPIEZA AQUÍ**
+
+**Descargaste:** `remax-crm-v2.zip`
+
+---
+
+## 📋 ¿QUÉ HACER AHORA?
+
+### ✅ Paso 1: Lee ESTO (5 min)
+
+```
+Este archivo: START_HERE.txt (lo que estás leyendo)
+```
+
+### ✅ Paso 2: Descomprime ZIP
+
+```bash
+unzip remax-crm-v2.zip
+cd remax-crm-v2
+```
+
+### ✅ Paso 3: Lee INSTRUCCIONES RÁPIDAS (20 min)
+
+```
+Abre: INSTRUCCIONES_RAPIDAS.md
+(Copiar/pegar comandos - super directo)
+```
+
+### ✅ Paso 4: Sigue los pasos
+
+```
+Paso 1: Google Cloud (5 min) - obtener credenciales OAuth
+Paso 2: GitHub (10 min) - crear repo y subir código
+Paso 3: Supabase (10 min) - crear BD y tablas
+Paso 4: Actualizar .env (5 min) - credenciales locales
+Paso 5: Probar localmente (5 min) - http://localhost:8000
+```
+
+---
+
+## 📁 ESTRUCTURA DEL ZIP
+
+```
+remax-crm-v2/
+├── 👈 INSTRUCCIONES_RAPIDAS.md    ← LEER PRIMERO
+├── README.md                      ← Documentación general
+├── .env.example                   ← Copiar a .env
+├── .gitignore                     ← No subir secretos
+│
+├── html/
+│   ├── index.html                 ← Login (OAuth Google)
+│   ├── dashboard.html             ← KPIs
+│   ├── admin.html                 ← Gestión usuarios
+│   ├── contactos.html             ← CRM
+│   ├── operaciones.html           ← Pipeline
+│   ├── finanzas.html              ← Ingresos/gastos
+│   ├── seguimiento.html           ← Tracking semanal
+│   └── ... (11 más)
+│
+├── css/
+│   └── style-enhanced.css         ← Estilos mejorados
+│
+├── js/
+│   └── shared.js                  ← Funciones + Supabase
+│
+├── sql/
+│   └── schema.sql                 ← BD structure (ejecutar en Supabase)
+│
+└── docs/
+    ├── SETUP_PASO_A_PASO.md       ← Detalles completos
+    ├── ANALISIS_MEJORAS_POR_MODULO.md
+    ├── MAPEO_TESTLAB_ANALISIS.md
+    └── GUIA_TEST_LAB.md
+```
+
+---
+
+## ⚡ RUTA RÁPIDA (30 min)
+
+```
+1. Descomprimir ZIP
+                ↓
+2. Abrir: INSTRUCCIONES_RAPIDAS.md
+                ↓
+3. Copiar/pegar PASO 1-2-3 (Google, GitHub, Supabase)
+                ↓
+4. Actualizar .env y código con credenciales
+                ↓
+5. Probar: python -m http.server 8000
+                ↓
+6. Abrir: http://localhost:8000/html/index.html
+                ↓
+✅ LISTO
+```
+
+---
+
+## 🎯 OBJETIVOS
+
+### A CORTO PLAZO (hoy)
+- ✅ Sistema funcionando en local
+- ✅ Código en GitHub
+- ✅ BD en Supabase
+- ✅ Login con Google funciona
+
+### PRÓXIMAS SEMANAS
+- Dashboard caché + optimización
+- Admin: validación backend (seguridad)
+- Operaciones: Kanban drag-and-drop
+- Contactos: búsqueda mejorada
+
+**Ver:** `docs/ANALISIS_MEJORAS_POR_MODULO.md`
+
+---
+
+## 📞 SI ALGO FALLA
+
+1. Abre F12 (Developer Tools)
+2. Pestaña "Console" - ¿hay errores rojos?
+3. Revisa INSTRUCCIONES_RAPIDAS.md → "🆘 ERRORES COMUNES"
+4. Si persiste → revisa que credenciales sean correctas
+
+---
+
+## 🗺️ MAPA DE DOCUMENTOS
+
+```
+PARA EMPEZAR:
+  → INSTRUCCIONES_RAPIDAS.md (esto)
+
+PARA ENTENDER EL PROYECTO:
+  → README.md
+
+PARA DETALLES TÉCNICOS:
+  → docs/SETUP_PASO_A_PASO.md
+  → docs/ANALISIS_MEJORAS_POR_MODULO.md
+
+PARA PROBAR SIN BACKEND:
+  → TEST_LAB_LOCAL.html (descárgalo de outputs/)
+  → docs/GUIA_TEST_LAB.md
+```
+
+---
+
+## 💾 ARCHIVO PRINCIPAL A DESCARGAR
+
+```
+Archivo: remax-crm-v2.zip (111 KB)
+Descomprimir y abrir: INSTRUCCIONES_RAPIDAS.md
+Tiempo: 30 minutos para tener todo funcionando
+```
+
+---
+
+## ✨ PRÓXIMOS PASOS
+
+Una vez que funciona localmente:
+
+1. **Probar módulos:** Abre cada HTML en navegador
+2. **Revisar mejoras:** Lee docs/ANALISIS_MEJORAS_POR_MODULO.md
+3. **Priorizar:** ¿Qué mejora primero? (caché, Kanban, búsqueda)
+4. **Implementar:** Una mejora a la vez
+
+---
+
+**🚀 VAMOS! Abre INSTRUCCIONES_RAPIDAS.md y comienza**
+
+```
+Preguntas? Revisa las docs/ carpeta
+```

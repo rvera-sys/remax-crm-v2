@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#cc0000">
+<title>RE/MAX — Dashboard</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div id="tc"></div>
+<div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+
+<div id="app" style="display:none">
+<main class="main">
+
+  <div class="ph">
+    <div>
+      <div class="ph-title" id="wtit">Hola</div>
+      <div class="ph-sub" id="wsub"></div>
+    </div>
+    <div class="flex gap-sm" style="align-items:center">
+      <div id="tc-box" style="display:none">
+        <label style="font-size:11px;color:var(--text3);margin-bottom:2px">TC hoy (USD→ARS)</label>
+        <div class="flex gap-sm">
+          <input type="number" id="tc-input" placeholder="1000" style="width:100px">
+          <button class="btn btn-primary btn-sm" onclick="saveTC()">Guardar TC</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alertas urgentes -->
+  <div id="alerts-box"></div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid">
+    <div class="kpi" id="kpi-contactos"><div class="kpi-label">Contactos</div><div class="kpi-val">—</div><div class="kpi-sub">—</div><div class="kpi-bar"><div class="kpi-fill" style="width:0%"></div></div></div>
+    <div class="kpi" id="kpi-captaciones"><div class="kpi-label">Captaciones</div><div class="kpi-val">—</div><div class="kpi-sub">—</div><div class="kpi-bar"><div class="kpi-fill" style="width:0%"></div></div></div>
+    <div class="kpi" id="kpi-visitas"><div class="kpi-label">Visitas</div><div class="kpi-val">—</div><div class="kpi-sub">—</div><div class="kpi-bar"><div class="kpi-fill" style="width:0%"></div></div></div>
+    <div class="kpi" id="kpi-cierres"><div class="kpi-label">Cierres</div><div class="kpi-val">—</div><div class="kpi-sub">—</div><div class="kpi-bar"><div class="kpi-fill" style="width:0%"></div></div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+    <!-- Semana actual -->
+    <div class="card">
+      <div class="flex-between mb-2">
+        <div class="card-title" style="margin:0">📋 Esta semana</div>
+        <a href="seguimiento.html" class="btn btn-sm">Ver todo →</a>
+      </div>
+      <div id="wbox"><div class="muted">Sin datos esta semana.</div></div>
+    </div>
+    <!-- Finanzas mes -->
+    <div class="card">
+      <div class="flex-between mb-2">
+        <div class="card-title" style="margin:0">💰 Finanzas del mes</div>
+        <a href="finanzas.html" class="btn btn-sm">Ver todo →</a>
+      </div>
+      <div id="fbox"><div class="muted">Sin transacciones.</div></div>
+    </div>
+  </div>
+
+  <!-- Operaciones activas -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="flex-between mb-2">
+      <div class="card-title" style="margin:0">🏠 Operaciones activas</div>
+      <a href="operaciones.html" class="btn btn-sm">Ver pipeline →</a>
+    </div>
+    <div id="ops-box"><div class="muted">Sin operaciones activas.</div></div>
+  </div>
+
+  <!-- Próximos eventos -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="flex-between mb-2">
+      <div class="card-title" style="margin:0">📅 Próximos 7 días</div>
+      <a href="calendario.html" class="btn btn-sm">Ver calendario →</a>
+    </div>
+    <div id="events-box"><div class="muted">Sin eventos próximos.</div></div>
+  </div>
+
+  <!-- Gráfico anual -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="flex-between mb-2">
+      <div class="card-title" style="margin:0">📈 Evolución anual</div>
+      <select id="chart-metric" onchange="updateChart()" class="btn btn-sm" style="padding:.3rem .6rem">
+        <option value="contacts_worked">Contactos</option>
+        <option value="captures">Captaciones</option>
+        <option value="sale_visits">Visitas</option>
+        <option value="closed_sales">Cierres</option>
+      </select>
+    </div>
+    <canvas id="myChart" height="80"></canvas>
+  </div>
+
+  <!-- BROKER: Ranking equipo -->
+  <div id="broker-sec" class="hidden">
+    <div class="flex-between" style="margin-bottom:.75rem">
+      <div style="font-size:15px;font-weight:600">👥 Estado del equipo</div>
+      <a href="equipo.html" class="btn btn-primary btn-sm">Ver equipo completo →</a>
+    </div>
+    <div id="team-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:.75rem"></div>
+  </div>
+
+</main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var chartInst = null, chartData = [];
+
+function updateChart() {
+  var metric = document.getElementById('chart-metric').value;
+  var labels = chartData.map(function(d){ return MNS[d.month-1]; });
+  var values = chartData.map(function(d){
+    var t = d.weekly_totals||{};
+    return (t[metric]||0);
+  });
+  var mx = Math.max.apply(null, values.concat([1]));
+  if(chartInst) chartInst.destroy();
+  chartInst = new Chart(document.getElementById('myChart').getContext('2d'), {
+    type:'bar',
+    data:{ labels:labels, datasets:[{ data:values,
+      backgroundColor: values.map(function(v){ return v/mx>=.8?'rgba(26,122,60,.85)':v/mx>=.5?'rgba(180,83,9,.85)':'rgba(204,0,0,.85)'; }),
+      borderRadius:5, borderSkipped:false }]},
+    options:{ responsive:true, plugins:{legend:{display:false}},
+      scales:{ y:{beginAtZero:true,ticks:{precision:0,font:{size:11}},grid:{color:'rgba(0,0,0,.04)'}},
+               x:{grid:{display:false},ticks:{font:{size:11}}} }}
+  });
+}
+
+async function saveTC() {
+  var rate = parseFloat(document.getElementById('tc-input').value);
+  if(!rate||rate<=0){ toast('Ingresá un tipo de cambio válido','error'); return; }
+  var r = await db.exchangeRate.set(CRM.user.id, rate);
+  if(r.error){ toast('Error al guardar','error'); return; }
+  toast('Tipo de cambio guardado: ARS '+rate);
+  document.getElementById('tc-box').style.display = 'none';
+}
+
+(async function(){
+  var r = await initPage('dashboard.html'); if(!r) return;
+  var user = r.user, now = new Date();
+  var month = now.getMonth()+1, year = now.getFullYear();
+  var mm = String(month).padStart(2,'0');
+  var goals = (user.settings && user.settings.monthly_goals) || {};
+
+  document.getElementById('wtit').textContent = 'Hola, '+((user.name||'').split(' ')[0]||'Agente') + ' 👋';
+  document.getElementById('wsub').textContent = MN[now.getMonth()]+' '+year+' · '+now.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long'});
+
+  // Verificar tipo de cambio del día
+  var tcR = await db.exchangeRate.today(user.id);
+  if(!tcR.data) document.getElementById('tc-box').style.display = '';
+
+  // Alertas
+  var al = await db.alerts.list(user.id);
+  if(al.data && al.data.length) {
+    var urgente = al.data.filter(function(a){ return a.scheduled_date < hoy(); });
+    var hoyAl   = al.data.filter(function(a){ return a.scheduled_date === hoy(); });
+    var boxes = '';
+    if(urgente.length) boxes += '<div class="alert-box alert-red">⚠️ '+urgente.length+' alerta'+(urgente.length>1?'s':'')+' vencida'+(urgente.length>1?'s':'')+': '+urgente.slice(0,3).map(function(a){ return a.contact_name; }).join(', ')+(urgente.length>3?' y más...':'')+'</div>';
+    if(hoyAl.length)   boxes += '<div class="alert-box alert-amber">🔔 '+hoyAl.length+' seguimiento'+(hoyAl.length>1?'s':'')+' para hoy</div>';
+    document.getElementById('alerts-box').innerHTML = boxes;
+  }
+
+  // KPIs desde weekly_tracking
+  var wt = await db.tracking.get(user.id, year, getISOWeek(now));
+  var t = (wt.data && wt.data.weekly_totals) || {};
+  kpi('contactos',  t.contacts_worked||0, goals.contacts||100);
+  kpi('captaciones',t.captures||0,        goals.captaciones||2);
+  kpi('visitas',    t.sale_visits||0,      goals.visitas||20);
+  kpi('cierres',    t.closed_sales||0,     goals.cierres||1);
+
+  if(wt.data) {
+    document.getElementById('wbox').innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">'
+      +[['Contactos',t.contacts_worked],['Pre-listings',t.prelistings],['Tasaciones',t.appraisals],['Captaciones',t.captures],['Consultas',t.sale_consultations],['Visitas',t.sale_visits]]
+      .map(function(x){ return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border2);font-size:12px"><span style="color:var(--text2)">'+x[0]+'</span><strong>'+(x[1]||0)+'</strong></div>'; }).join('')+'</div>';
+  }
+
+  // Finanzas del mes
+  var txR = await db.transactions.list(user.id, year+'-'+mm+'-01', year+'-'+mm+'-31');
+  var txAll = txR.data||[];
+  var inc = txAll.filter(function(t){ return t.type==='ingreso'; }).reduce(function(s,t){ return s+Number(t.amount_ars); },0);
+  var exp = txAll.filter(function(t){ return t.type==='gasto'; }).reduce(function(s,t){ return s+Number(t.amount_ars); },0);
+  var bal = inc-exp;
+  document.getElementById('fbox').innerHTML = '<div class="fin-trio">'
+    +'<div class="fin-box" style="background:var(--green-light)"><div class="fin-label" style="color:#3B6D11">INGRESOS</div><div class="fin-val" style="color:#27500A">'+fmt$(inc)+'</div></div>'
+    +'<div class="fin-box" style="background:var(--red-mid)"><div class="fin-label" style="color:#A32D2D">GASTOS</div><div class="fin-val" style="color:#791F1F">'+fmt$(exp)+'</div></div>'
+    +'<div class="fin-box" style="background:var(--surface2)"><div class="fin-label" style="color:var(--text2)">NETO</div><div class="fin-val" style="color:'+(bal>=0?'var(--green)':'var(--red)')+'">'+fmt$(bal)+'</div></div>'
+    +'</div>';
+
+  // Operaciones activas
+  var opsR = await db.operations.list({user_id:user.id});
+  var ops = (opsR.data||[]).filter(function(o){ return !['escritura','contrato','post_venta'].includes(o.stage); });
+  if(ops.length) {
+    document.getElementById('ops-box').innerHTML = ops.slice(0,5).map(function(o){
+      var seller = o.seller||{};
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:0.5px solid var(--border2)">'
+        +'<div style="display:flex;align-items:center;gap:9px"><div class="avatar avatar-sm">'+ini(seller.name||'')+'</div>'
+        +'<div><div style="font-size:13px;font-weight:500">'+(seller.name||'—')+'</div>'
+        +'<div style="font-size:11px;color:var(--text3)">'+(o.type==='venta'?'Venta':'Alquiler')+'</div></div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px">'
+        +'<span class="badge stage-'+o.stage+'">'+(STAGE_LABELS[o.stage]||o.stage)+'</span>'
+        +'<a href="operaciones.html" class="btn btn-sm">Ver</a></div></div>';
+    }).join('') + (ops.length>5?'<div class="muted" style="margin-top:.5rem;font-size:12px">+'+( ops.length-5)+' más</div>':'');
+  }
+
+  // Próximos eventos (nurturing + post-venta + 7 días)
+  var in7 = new Date(); in7.setDate(in7.getDate()+7);
+  var in7str = in7.toISOString().slice(0,10);
+  var [nurtR, psR] = await Promise.all([
+    sb.from('nurturing_followups').select('*, contact:contacts(name)').eq('user_id',user.id).is('completed_at',null).gte('scheduled_date',hoy()).lte('scheduled_date',in7str).order('scheduled_date'),
+    sb.from('post_sale_followups').select('*, contact:contacts(name)').eq('user_id',user.id).is('completed_at',null).gte('scheduled_date',hoy()).lte('scheduled_date',in7str).order('scheduled_date')
+  ]);
+  var evts = [];
+  (nurtR.data||[]).forEach(function(n){ evts.push({date:n.scheduled_date,label:'Nurturing: '+(n.contact&&n.contact.name||'—'),type:'nurturing',href:'nurturing.html'}); });
+  (psR.data||[]).forEach(function(p){ evts.push({date:p.scheduled_date,label:'Post-venta: '+(p.contact&&p.contact.name||'—')+' ('+p.stage+')',type:'post_venta',href:'postventa.html'}); });
+  evts.sort(function(a,b){ return a.date.localeCompare(b.date); });
+  if(evts.length) {
+    document.getElementById('events-box').innerHTML = evts.slice(0,6).map(function(e){
+      var colors = {nurturing:'var(--amber)',post_venta:'var(--green)'};
+      return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:0.5px solid var(--border2)">'
+        +'<div style="font-size:11px;color:var(--text3);min-width:60px">'+fd(e.date)+'</div>'
+        +'<div style="width:8px;height:8px;border-radius:50%;background:'+(colors[e.type]||'var(--text3)')+';flex-shrink:0"></div>'
+        +'<div style="flex:1;font-size:13px">'+e.label+'</div>'
+        +'<a href="'+e.href+'" class="btn btn-sm">Ver</a></div>';
+    }).join('');
+  }
+
+  // Gráfico anual
+  var awR = await sb.from('weekly_tracking').select('month,weekly_totals').eq('user_id',user.id).eq('year',year).order('month');
+  var bm = {};
+  (awR.data||[]).forEach(function(w){
+    var m = w.month;
+    if(!bm[m]) bm[m] = {month:m, weekly_totals:{}};
+    Object.keys(w.weekly_totals||{}).forEach(function(k){ bm[m].weekly_totals[k] = (bm[m].weekly_totals[k]||0) + (w.weekly_totals[k]||0); });
+  });
+  chartData = [];
+  for(var i=1; i<=month; i++) chartData.push(bm[i]||{month:i,weekly_totals:{}});
+  updateChart();
+
+  // BROKER: equipo
+  if(user.role === 'broker') {
+    document.getElementById('broker-sec').classList.remove('hidden');
+    var perfR = await db.users.performance();
+    var agents = perfR.data||[];
+    if(agents.length) {
+      document.getElementById('team-grid').innerHTML = agents.map(function(ag){
+        var meta = (ag.settings && ag.settings.monthly_goals) || {};
+        var perf = agentPerformanceStatus(ag, meta);
+        var semCls = {over:'sem-blue',good:'sem-green',warn:'sem-amber',bad:'sem-red'}[perf.status];
+        return '<div class="card" style="cursor:pointer" onclick="window.location=\'equipo.html?id='+ag.user_id+'\'">'
+          +'<div class="flex-between" style="margin-bottom:.65rem">'
+          +'<div class="flex gap-sm" style="align-items:center">'
+          +'<div class="semaforo '+semCls+'"></div>'
+          +'<div class="avatar avatar-sm">'+ini(ag.name)+'</div>'
+          +'<div><div style="font-size:13px;font-weight:500">'+ag.name+'</div>'
+          +'<div style="font-size:11px;color:var(--text3)">'+perf.message+' · '+perf.avg+'%</div></div></div>'
+          +'</div>'
+          +'<div class="perf-bar"><div class="perf-fill" style="width:'+Math.min(perf.avg,100)+'%;background:'+perf.color+'"></div></div>'
+          +'<div style="font-size:11px;color:var(--text2);margin-top:.5rem">'+perf.suggestion+'</div>'
+          +'</div>';
+      }).join('');
+    }
+  }
+})();
+
+function getISOWeek(d) {
+  var date = new Date(d); date.setHours(0,0,0,0);
+  date.setDate(date.getDate()+3-(date.getDay()+6)%7);
+  var week1 = new Date(date.getFullYear(),0,4);
+  return 1+Math.round(((date-week1)/86400000-3+(week1.getDay()+6)%7)/7);
+}
+</script>
+</body>
+</html>

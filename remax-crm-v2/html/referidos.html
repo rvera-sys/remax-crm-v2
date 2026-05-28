@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RE/MAX — Referidos</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div><div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div><div class="ph-title">🔄 Referidos</div><div class="ph-sub">Quién te trajo cada cliente y qué negocios generó</div></div>
+  </div>
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi"><div class="kpi-label">Total referidos</div><div class="kpi-val" id="k-total">—</div></div>
+    <div class="kpi good"><div class="kpi-label">Con negocio</div><div class="kpi-val" id="k-neg">—</div></div>
+    <div class="kpi warn"><div class="kpi-label">Pendientes</div><div class="kpi-val" id="k-pend">—</div></div>
+    <div class="kpi good"><div class="kpi-label">Com. generadas</div><div class="kpi-val" id="k-comm" style="font-size:14px">—</div></div>
+  </div>
+  <!-- Por origen -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="card-title">📊 Contactos por origen</div>
+    <div id="origins-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px"></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Lista de referidos</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Quién refirió</th><th>Nuevo contacto</th><th>Origen</th><th>Operación</th><th>Comisión</th><th>Estado</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid;
+var SL={pendiente:'badge-amber',en_proceso:'badge-blue',cerrado:'badge-green',sin_negocio:'badge-gray'};
+var SLL={pendiente:'Pendiente',en_proceso:'En proceso',cerrado:'Cerrado',sin_negocio:'Sin negocio'};
+(async function(){var r=await initPage('referidos.html');if(!r)return;uid=r.user.id;await load();})();
+async function load(){
+  var [refR,conR]=await Promise.all([
+    db.referrals.list(uid),
+    sb.from('contacts').select('id,origin').eq('user_id',uid).is('deleted_at',null)
+  ]);
+  var all=refR.data||[];
+  var contacts=conR.data||[];
+  document.getElementById('k-total').textContent=all.length;
+  document.getElementById('k-neg').textContent=all.filter(function(r){return r.operation_id;}).length;
+  document.getElementById('k-pend').textContent=all.filter(function(r){return r.status==='pendiente';}).length;
+  var comm=all.filter(function(r){return r.status==='cerrado';}).reduce(function(s,r){return s+Number(r.commission_amount_usd||0);},0);
+  document.getElementById('k-comm').textContent=fmtU(comm);
+  // Por origen
+  var byOrig={};
+  contacts.forEach(function(c){byOrig[c.origin]=(byOrig[c.origin]||0)+1;});
+  var origEntries=Object.entries(byOrig).sort(function(a,b){return b[1]-a[1];});
+  var maxO=origEntries.length?origEntries[0][1]:1;
+  document.getElementById('origins-grid').innerHTML=origEntries.map(function(e){
+    var p=Math.round(e[1]/maxO*100);
+    return'<div style="background:var(--surface2);border-radius:8px;padding:10px">'
+      +'<div style="font-size:11px;font-weight:500;margin-bottom:4px">'+(ORIGIN_LABELS[e[0]]||e[0])+'</div>'
+      +'<div style="font-size:20px;font-weight:700;color:var(--blue);margin-bottom:4px">'+e[1]+'</div>'
+      +'<div style="height:4px;background:var(--border);border-radius:99px;overflow:hidden"><div style="height:100%;width:'+p+'%;background:var(--blue);border-radius:99px"></div></div>'
+      +'</div>';
+  }).join('');
+  var tb=document.getElementById('tbody');
+  if(!all.length){tb.innerHTML='<tr><td colspan="6"><div class="empty">Sin referidos registrados aún.<br><small>Se crean automáticamente desde Post-venta al obtener un referido.</small></div></td></tr>';return;}
+  tb.innerHTML=all.map(function(r){
+    var src=r.source||{},ref=r.referred||{},op=r.operation||{};
+    return'<tr>'
+      +'<td><div style="display:flex;align-items:center;gap:8px"><div class="avatar avatar-sm">'+ini(src.name||'')+'</div><span style="font-weight:500">'+(src.name||'—')+'</span></div></td>'
+      +'<td><div style="display:flex;align-items:center;gap:8px"><div class="avatar avatar-sm">'+ini(ref.name||'')+'</div><span>'+(ref.name||'—')+'</span></div></td>'
+      +'<td style="font-size:12px;color:var(--text2)">'+(ORIGIN_LABELS[r.source_type]||r.source_type||'—')+'</td>'
+      +'<td>'+(op.type?'<span class="badge '+(op.type==='venta'?'badge-blue':'badge-green')+'">'+(op.type==='venta'?'Venta':'Alquiler')+'</span>':'<span class="badge badge-gray">Sin operación</span>')+'</td>'
+      +'<td style="color:var(--green);font-weight:500">'+(r.commission_amount_usd?fmtU(r.commission_amount_usd):'—')+'</td>'
+      +'<td><span class="badge '+(SL[r.status]||'badge-gray')+'">'+(SLL[r.status]||r.status)+'</span></td></tr>';
+  }).join('');
+}
+</script>
+</body>
+</html>

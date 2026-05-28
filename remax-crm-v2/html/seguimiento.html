@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RE/MAX — Seguimiento</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div><div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div><div class="ph-title">📋 Seguimiento semanal</div><div class="ph-sub" id="wlabel"></div></div>
+    <div class="flex gap-sm">
+      <button class="btn" onclick="changeWeek(-1)">← Ant.</button>
+      <button class="btn btn-primary" id="btn-save" onclick="saveAll()">Guardar</button>
+      <button class="btn" onclick="changeWeek(1)">Sig. →</button>
+    </div>
+  </div>
+  <div class="kpi-grid" style="margin-bottom:1rem" id="totals-grid"></div>
+  <div class="week-grid" id="days-grid"></div>
+  <div class="card">
+    <div class="card-title">📊 Acumulado del mes</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>Semana</th><th>Contactos</th><th>Pre-list.</th><th>Tasac.</th><th>Captac.</th><th>Consultas</th><th>Visitas</th><th>Cierres</th></tr></thead>
+        <tbody id="monthly-tb"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var METRICS=[{k:'contacts_worked',l:'Contactos'},{k:'prelistings',l:'Pre-list.'},{k:'appraisals',l:'Tasaciones'},{k:'captures',l:'Captaciones'},{k:'sale_consultations',l:'Consultas'},{k:'sale_visits',l:'Visitas'},{k:'closed_sales',l:'Cierres'}];
+var DAYS=['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+var uid,curYear,curWeek,weekRec=null;
+function getISOWeek(d){var date=new Date(d);date.setHours(0,0,0,0);date.setDate(date.getDate()+3-(date.getDay()+6)%7);var week1=new Date(date.getFullYear(),0,4);return 1+Math.round(((date-week1)/86400000-3+(week1.getDay()+6)%7)/7);}
+function getWDates(year,week){var jan4=new Date(year,0,4);var mon=new Date(jan4);mon.setDate(jan4.getDate()-(jan4.getDay()+6)%7+(week-1)*7);var dates=[];for(var i=0;i<6;i++){var d=new Date(mon);d.setDate(mon.getDate()+i);dates.push(d.toISOString().slice(0,10));}return dates;}
+function renderTotals(t){document.getElementById('totals-grid').innerHTML=METRICS.slice(0,4).map(function(m){return'<div class="kpi"><div class="kpi-label">'+m.l+'</div><div class="kpi-val" style="color:var(--blue)">'+(t[m.k]||0)+'</div><div class="kpi-sub">esta semana</div></div>';}).join('');}
+function renderDays(dates,existing){var today=hoy();document.getElementById('days-grid').innerHTML=dates.map(function(date,i){var ex=(existing||[]).find(function(d){return d.date===date;})||{};var isT=date===today;return'<div class="day-card'+(isT?' today':'')+'"><div class="day-name">'+DAYS[i]+'</div><div class="day-date">'+fd2(date)+(isT?' · Hoy':'')+'</div>'+METRICS.map(function(m){return'<div class="dm"><span>'+m.l+'</span><input type="number" min="0" id="d-'+date+'-'+m.k+'" value="'+((ex.metrics&&ex.metrics[m.k])||0)+'"></div>';}).join('')+'</div>';}).join('');}
+async function loadWeek(){
+  var r=await db.tracking.get(uid,curYear,curWeek);weekRec=r.data;
+  var dates=getWDates(curYear,curWeek);
+  var mname=new Date(dates[0]+'T00:00:00').toLocaleString('es-AR',{month:'long'});
+  document.getElementById('wlabel').textContent='Semana '+curWeek+' — '+mname+' '+curYear;
+  renderTotals((r.data&&r.data.weekly_totals)||{});renderDays(dates,(r.data&&r.data.days)||[]);
+}
+async function saveAll(){
+  var dates=getWDates(curYear,curWeek);
+  var days=dates.map(function(date,i){var metrics={};METRICS.forEach(function(m){var el=document.getElementById('d-'+date+'-'+m.k);metrics[m.k]=el?parseInt(el.value)||0:0;});return{date:date,day_name:DAYS[i],metrics:metrics};});
+  var wt={};METRICS.forEach(function(m){wt[m.k]=days.reduce(function(s,d){return s+(d.metrics[m.k]||0);},0);});
+  var now=new Date();
+  var r=await db.tracking.upsert({user_id:uid,year:curYear,week_number:curWeek,month:now.getMonth()+1,days:days,weekly_totals:wt,updated_at:now.toISOString()});
+  if(r.error){toast('Error: '+r.error.message,'error');return;}
+  var btn=document.getElementById('btn-save');btn.textContent='¡Guardado!';btn.style.background='var(--green)';
+  setTimeout(function(){btn.textContent='Guardar';btn.style.background='';},1500);
+  await loadWeek();await loadMonthly();
+}
+async function changeWeek(d){curWeek+=d;if(curWeek<1){curYear--;curWeek=52;}if(curWeek>53){curYear++;curWeek=1;}await loadWeek();}
+async function loadMonthly(){
+  var now=new Date();
+  var r=await db.tracking.month(uid,now.getFullYear(),now.getMonth()+1);
+  var tb=document.getElementById('monthly-tb');
+  if(!r.data||!r.data.length){tb.innerHTML='<tr><td colspan="8" class="muted" style="padding:1rem;text-align:center">Sin datos este mes.</td></tr>';return;}
+  var tot={};METRICS.forEach(function(m){tot[m.k]=0;});
+  r.data.forEach(function(w){METRICS.forEach(function(m){tot[m.k]+=(w.weekly_totals[m.k]||0);});});
+  var rows=r.data.map(function(w){var t=w.weekly_totals||{};return'<tr><td><strong>Sem. '+w.week_number+'</strong></td>'+METRICS.map(function(m){return'<td>'+(t[m.k]||0)+'</td>';}).join('')+'</tr>';}).join('');
+  rows+='<tr style="background:var(--surface2)"><td><strong>Total mes</strong></td>'+METRICS.map(function(m){return'<td class="fw" style="color:'+(tot[m.k]>0?'var(--green)':'var(--text3)')+'">'+tot[m.k]+'</td>';}).join('')+'</tr>';
+  tb.innerHTML=rows;
+}
+(async function(){var r=await initPage('seguimiento.html');if(!r)return;uid=r.user.id;var now=new Date();curYear=now.getFullYear();curWeek=getISOWeek(now);await loadWeek();await loadMonthly();})();
+</script>
+</body>
+</html>

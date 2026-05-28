@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#cc0000">
+<title>RE/MAX — Nurturing</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div>
+<div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div>
+      <div class="ph-title">🔄 Nurturing</div>
+      <div class="ph-sub">Contactos que rechazaron la tasación — seguimiento automático</div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi bad"><div class="kpi-label">Vencidos</div><div class="kpi-val" id="k-venc">—</div><div class="kpi-sub">sin completar</div></div>
+    <div class="kpi warn"><div class="kpi-label">Esta semana</div><div class="kpi-val" id="k-week">—</div><div class="kpi-sub">próximos 7 días</div></div>
+    <div class="kpi"><div class="kpi-label">Total activos</div><div class="kpi-val" id="k-total">—</div><div class="kpi-sub">en seguimiento</div></div>
+    <div class="kpi good"><div class="kpi-label">Aceptaron</div><div class="kpi-val" id="k-yes">—</div><div class="kpi-sub">este año</div></div>
+  </div>
+
+  <!-- Lista de toques pendientes -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="flex-between mb-2">
+      <div class="card-title" style="margin:0">📋 Toques pendientes</div>
+      <select id="fstatus" onchange="doFilter()" style="width:auto" class="btn btn-sm" style="padding:.3rem .6rem">
+        <option value="todos">Todos</option>
+        <option value="vencido">Vencidos ⚠️</option>
+        <option value="hoy">Hoy</option>
+        <option value="semana">Esta semana</option>
+        <option value="futuro">Futuros</option>
+      </select>
+    </div>
+    <div id="nurturing-list"></div>
+  </div>
+
+  <!-- Histórico completados -->
+  <div class="card">
+    <div class="card-title">✅ Completados (historial)</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Contacto</th><th>Toque</th><th>Fecha programada</th><th>Completado</th><th>Resultado</th></tr>
+        </thead>
+        <tbody id="tbody-hist"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- Modal: Registrar toque -->
+<div class="overlay hidden" id="modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="mtit">Registrar toque</div>
+        <div style="font-size:12px;color:var(--text3)" id="msub">—</div>
+      </div>
+      <button class="btn btn-sm" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Mensaje WhatsApp pre-armado -->
+      <div id="wa-section" style="margin-bottom:1rem"></div>
+
+      <div class="frow">
+        <label>Resultado del contacto *</label>
+        <select id="mresult" onchange="toggleResult()">
+          <option value="">Seleccionar resultado…</option>
+          <option value="no_contesto">No contestó</option>
+          <option value="no_quiere_aun">No quiere vender aún</option>
+          <option value="acepta">✅ Acepta trabajar conmigo</option>
+          <option value="vendio_con_otro">Vendió / alquiló con otro</option>
+          <option value="no_vende">Decidió no vender</option>
+        </select>
+      </div>
+
+      <div class="frow"><label>Notas</label><textarea id="mnotes" placeholder="¿Qué dijo? ¿Qué está esperando?" style="min-height:70px"></textarea></div>
+
+      <!-- Si acepta: proponer operación -->
+      <div id="acepta-panel" class="alert-box alert-green hidden">
+        🎉 ¡Excelente! Al confirmar se cerrará el nurturing y podrás iniciar la operación directamente.
+      </div>
+
+      <!-- Si vendió con otro o no vende: cierre -->
+      <div id="cierre-panel" class="alert-box alert-amber hidden">
+        El nurturing se cerrará y el contacto quedará archivado. Queda registrado para estadísticas.
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="bsave" onclick="saveTouch()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid, pending=[], completed=[], curTouch=null;
+
+var STAGE_L = { '7d':'1er toque (+7 días)','30d':'2do toque (+30 días)','60d':'3er toque (+60 días)','90d':'4to toque (+90 días)','mensual':'Toque mensual' };
+var RESULT_L = { no_contesto:'No contestó', no_quiere_aun:'No quiere aún', acepta:'Acepta ✅', vendio_con_otro:'Vendió con otro', no_vende:'No vende' };
+var RESULT_BC = { no_contesto:'badge-gray', no_quiere_aun:'badge-amber', acepta:'badge-green', vendio_con_otro:'badge-red', no_vende:'badge-red' };
+
+(async function(){
+  var r = await initPage('nurturing.html'); if(!r) return;
+  uid = r.user.id;
+  await load();
+})();
+
+async function load() {
+  var [pendR, compR, yesR] = await Promise.all([
+    db.nurturing.list(uid),
+    sb.from('nurturing_followups').select('*, contact:contacts(id,name)').eq('user_id',uid).not('completed_at','is',null).order('completed_at',{ascending:false}).limit(30),
+    sb.from('nurturing_followups').select('id',{count:'exact',head:true}).eq('user_id',uid).eq('result','acepta')
+  ]);
+  pending   = pendR.data||[];
+  completed = compR.data||[];
+
+  var today = hoy();
+  var in7   = addDays(today,7);
+  var venc  = pending.filter(function(f){ return f.scheduled_date < today; });
+  var week  = pending.filter(function(f){ return f.scheduled_date>=today && f.scheduled_date<=in7; });
+
+  document.getElementById('k-venc').textContent  = venc.length;
+  document.getElementById('k-week').textContent  = week.length;
+  document.getElementById('k-total').textContent = pending.length;
+  document.getElementById('k-yes').textContent   = yesR.count||0;
+
+  doFilter();
+  renderHistory();
+}
+
+function doFilter() {
+  var f = document.getElementById('fstatus').value;
+  var today = hoy();
+  var in7   = addDays(today,7);
+  var list  = pending;
+  if(f==='vencido') list = pending.filter(function(x){ return x.scheduled_date < today; });
+  else if(f==='hoy')    list = pending.filter(function(x){ return x.scheduled_date === today; });
+  else if(f==='semana') list = pending.filter(function(x){ return x.scheduled_date>=today && x.scheduled_date<=in7; });
+  else if(f==='futuro') list = pending.filter(function(x){ return x.scheduled_date > in7; });
+  renderList(list);
+}
+
+function renderList(list) {
+  var el = document.getElementById('nurturing-list');
+  if(!list.length) {
+    el.innerHTML = '<div class="empty">Sin toques pendientes en este filtro.</div>';
+    return;
+  }
+  var today = hoy();
+  el.innerHTML = list.map(function(f){
+    var c = f.contact||{};
+    var acm = f.acm||{};
+    var venc = f.scheduled_date < today;
+    var ishoy = f.scheduled_date === today;
+    var semColor = venc?'sem-red':ishoy?'sem-amber':'sem-green';
+    var bg = venc?'var(--red-mid)':ishoy?'var(--amber-light)':'var(--surface)';
+    return '<div style="display:flex;align-items:center;gap:12px;padding:.85rem;border-radius:8px;background:'+bg+';border:0.5px solid var(--border);margin-bottom:6px">'
+      +'<div class="semaforo '+semColor+'"></div>'
+      +'<div class="avatar avatar-sm">'+ini(c.name||'')+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13px;font-weight:500">'+c.name+'</div>'
+      +'<div style="font-size:11px;color:var(--text2)">'+(STAGE_L[f.stage]||f.stage)+' · '+fd(f.scheduled_date)+(venc?' ⚠️ VENCIDO':ishoy?' 📅 HOY':'')+'</div>'
+      +(acm.address?'<div style="font-size:11px;color:var(--text3)">Propiedad: '+acm.address+'</div>':'')
+      +'</div>'
+      +'<div class="flex gap-sm">'
+      +(c.phone?'<a href="https://wa.me/54'+c.phone.replace(/\D/g,'')+'" target="_blank" class="btn btn-sm btn-green">💬 WA</a>':'')
+      +'<button class="btn btn-sm btn-primary" data-id="'+f.id+'" onclick="openTouch(this)">Registrar</button>'
+      +'</div></div>';
+  }).join('');
+}
+
+function renderHistory() {
+  var tb = document.getElementById('tbody-hist');
+  if(!completed.length){ tb.innerHTML='<tr><td colspan="5"><div class="empty" style="padding:1rem">Sin toques completados aún.</div></td></tr>'; return; }
+  tb.innerHTML = completed.map(function(f){
+    var c = f.contact||{};
+    return '<tr>'
+      +'<td><div style="display:flex;align-items:center;gap:8px"><div class="avatar avatar-sm">'+ini(c.name||'')+'</div><span style="font-weight:500">'+c.name+'</span></div></td>'
+      +'<td><span class="badge badge-gray">'+(STAGE_L[f.stage]||f.stage)+'</span></td>'
+      +'<td style="color:var(--text3)">'+fd(f.scheduled_date)+'</td>'
+      +'<td style="color:var(--text3)">'+fd(f.completed_at&&f.completed_at.slice(0,10))+'</td>'
+      +'<td><span class="badge '+(RESULT_BC[f.result]||'badge-gray')+'">'+(RESULT_L[f.result]||f.result||'—')+'</span></td>'
+      +'</tr>';
+  }).join('');
+}
+
+function openTouch(btn) {
+  var id = btn.getAttribute('data-id');
+  curTouch = pending.find(function(f){ return f.id===id; });
+  if(!curTouch) return;
+  var c = curTouch.contact||{};
+  var acm = curTouch.acm||{};
+  document.getElementById('mtit').textContent = 'Registrar toque — '+c.name;
+  document.getElementById('msub').textContent = (STAGE_L[curTouch.stage]||curTouch.stage)+' · '+fd(curTouch.scheduled_date);
+  document.getElementById('mresult').value = '';
+  document.getElementById('mnotes').value = '';
+  document.getElementById('acepta-panel').classList.add('hidden');
+  document.getElementById('cierre-panel').classList.add('hidden');
+
+  // WhatsApp pre-armado según etapa
+  if(c.phone) {
+    var waNum = '54'+c.phone.replace(/\D/g,'');
+    var msgs = {
+      '7d': 'Hola '+c.name.split(' ')[0]+'! Te escribo para ver si tuviste tiempo de pensar en la tasación que te presenté. ¿Tenés alguna consulta o querés que nos juntemos a conversarlo?',
+      '30d': 'Hola '+c.name.split(' ')[0]+'! Un mes después de nuestra reunión quería contarte que el mercado sigue activo en tu zona. ¿Seguís pensando en la posibilidad de vender?',
+      '60d': 'Hola '+c.name.split(' ')[0]+'! Te escribo con novedades del mercado. Hay movimiento interesante en propiedades similares a la tuya. ¿Tenés un momento para charlar?',
+      '90d': 'Hola '+c.name.split(' ')[0]+'! Pasaron 3 meses y quería retomar el contacto. ¿Hubo algún cambio en tus planes con la propiedad?',
+      'mensual': 'Hola '+c.name.split(' ')[0]+'! Te escribo para mantenernos en contacto. ¿Cómo estás? ¿Alguna novedad con la propiedad?'
+    };
+    var msg = msgs[curTouch.stage]||msgs['mensual'];
+    document.getElementById('wa-section').innerHTML =
+      '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:.5rem">'
+      +'<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">MENSAJE SUGERIDO PARA WHATSAPP</div>'
+      +'<div style="font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.5">'+msg+'</div>'
+      +'<a href="https://wa.me/'+waNum+'?text='+encodeURIComponent(msg)+'" target="_blank" class="btn btn-sm btn-green">💬 Abrir en WhatsApp</a>'
+      +'</div>';
+  } else {
+    document.getElementById('wa-section').innerHTML = '';
+  }
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('modal').classList.add('hidden'); curTouch=null; }
+
+function toggleResult() {
+  var v = document.getElementById('mresult').value;
+  document.getElementById('acepta-panel').classList.toggle('hidden', v!=='acepta');
+  document.getElementById('cierre-panel').classList.toggle('hidden', v!=='vendio_con_otro' && v!=='no_vende');
+}
+
+async function saveTouch() {
+  if(!curTouch) return;
+  var result = document.getElementById('mresult').value;
+  var notes  = document.getElementById('mnotes').value.trim();
+  if(!result){ toast('Seleccioná el resultado del toque','error'); return; }
+
+  var btn = document.getElementById('bsave'); btn.disabled=true; btn.textContent='Guardando…';
+
+  // Completar el toque actual
+  var r = await db.nurturing.complete(curTouch.id, {result:result, notes:notes||null});
+  if(r.error){ btn.disabled=false; btn.textContent='Registrar'; toast('Error: '+r.error.message,'error'); return; }
+
+  var c = curTouch.contact||{};
+
+  if(result==='acepta') {
+    // Cerrar nurturing — cambiar status del contacto
+    await db.contacts.update(curTouch.contact_id, {status:'activo', nurturing_stage:null, next_action_date:hoy()});
+    toast('¡Excelente! Contacto listo para iniciar operación 🎉');
+    btn.disabled=false; btn.textContent='Registrar';
+    closeModal(); await load();
+    // Redirigir a crear operación
+    if(confirm('¿Querés iniciar la operación ahora?')) {
+      window.location.href = 'operaciones.html?contact='+curTouch.contact_id;
+    }
+    return;
+  }
+
+  if(result==='vendio_con_otro'||result==='no_vende') {
+    // Archivar contacto
+    await db.contacts.update(curTouch.contact_id, {status:'perdido', nurturing_stage:null});
+    // Completar todos los toques pendientes de este contacto
+    await sb.from('nurturing_followups')
+      .update({completed_at:new Date().toISOString(), result:result})
+      .eq('contact_id',curTouch.contact_id)
+      .is('completed_at',null);
+    toast('Nurturing cerrado — contacto archivado');
+    btn.disabled=false; btn.textContent='Registrar';
+    closeModal(); await load();
+    return;
+  }
+
+  // Para no_contesto / no_quiere_aun → crear siguiente toque mensual si ya pasó el 90d
+  if(result==='no_contesto'||result==='no_quiere_aun') {
+    if(curTouch.stage==='90d'||curTouch.stage==='mensual') {
+      var nextDate = addDays(hoy(), 30);
+      var newTouch = await db.nurturing.addMensual({
+        user_id:uid, contact_id:curTouch.contact_id,
+        acm_id:curTouch.acm_id, stage:'mensual', scheduled_date:nextDate
+      });
+      // Crear evento en Calendar
+      if(CRM.googleAccessToken && newTouch.data) {
+        calendarCreateEvent({
+          title:'Nurturing: '+c.name+' — Toque mensual',
+          description:'Seguimiento mensual de tasación rechazada.',
+          date:nextDate, duration_minutes:30, type:'nurturing'
+        }).then(function(evId){
+          if(evId) sb.from('nurturing_followups').update({calendar_event_id:evId}).eq('id',newTouch.data[0].id);
+        });
+      }
+    }
+    // Actualizar next_action_date del contacto
+    var nextActionDate = addDays(hoy(), curTouch.stage==='7d'?30:curTouch.stage==='30d'?30:curTouch.stage==='60d'?30:30);
+    await db.contacts.update(curTouch.contact_id, {next_action_date:nextActionDate});
+  }
+
+  toast('Toque registrado');
+  btn.disabled=false; btn.textContent='Registrar';
+  closeModal(); await load();
+}
+</script>
+</body>
+</html>

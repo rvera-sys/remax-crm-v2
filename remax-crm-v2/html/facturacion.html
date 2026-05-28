@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RE/MAX — Facturación</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div><div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div><div class="ph-title">🧾 Facturación</div><div class="ph-sub">Facturas generadas — automáticas y manuales</div></div>
+    <button class="btn btn-primary" onclick="openCalc()">🔢 Calculadora manual</button>
+  </div>
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi warn"><div class="kpi-label">Pendientes</div><div class="kpi-val" id="k-pend">—</div></div>
+    <div class="kpi good"><div class="kpi-label">Cobradas</div><div class="kpi-val" id="k-cob">—</div></div>
+    <div class="kpi good"><div class="kpi-label">Total cobrado ARS</div><div class="kpi-val" id="k-tot" style="font-size:14px">—</div></div>
+    <div class="kpi"><div class="kpi-label">Pendiente de cobro</div><div class="kpi-val" id="k-pend-tot" style="font-size:14px">—</div></div>
+  </div>
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr><th>N°</th><th>Fecha</th><th>Operación</th><th>Lado</th><th>Origen</th><th>TC</th><th>Total ARS</th><th>Mi parte ARS</th><th>Estado</th><th></th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+<!-- Calculadora -->
+<div class="overlay hidden" id="modal-calc">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head"><div class="modal-title">Calculadora de honorarios</div><button class="btn btn-sm" onclick="closeCalc()">✕</button></div>
+    <div class="modal-body">
+      <div class="frow"><label>Valor de la operación (USD)</label><input id="cv" type="number" value="100000" oninput="calc()"></div>
+      <div class="fgrid">
+        <div class="frow"><label>% Com. vendedor</label><input id="csv" type="number" step="0.5" value="3" oninput="calc()"></div>
+        <div class="frow"><label>% Com. comprador</label><input id="ccc" type="number" step="0.5" value="4" oninput="calc()"></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>% a facturar del total</label><input id="cpf" type="number" value="100" oninput="calc()"></div>
+        <div class="frow"><label>% IVA</label><input id="civa" type="number" value="21" oninput="calc()"></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>% Split agente (de RE/MAX)</label><input id="cpa" type="number" value="45" oninput="calc()"></div>
+        <div class="frow"><label>TC (USD→ARS)</label><input id="ctc" type="number" placeholder="1000" oninput="calc()"></div>
+      </div>
+      <div id="calc-result" style="background:var(--surface2);border-radius:8px;padding:14px;margin-top:.5rem"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:.85rem" onclick="saveManual()">Generar factura manual</button>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid,all=[];
+var TRIGGER={boleto:'Boleto',escritura:'Escritura',contrato:'Contrato',manual:'Manual'};
+var SIDE={vendedor:'Vendedor',comprador:'Comprador'};
+(async function(){var r=await initPage('facturacion.html');if(!r)return;uid=r.user.id;var tcR=await db.exchangeRate.today(uid);if(tcR.data)document.getElementById('ctc').value=tcR.data.rate;calc();await load();})();
+async function load(){
+  var r=await db.invoices.list(uid);all=r.data||[];
+  var pend=all.filter(function(f){return f.status==='pendiente';});
+  var cob=all.filter(function(f){return f.status==='cobrada';});
+  document.getElementById('k-pend').textContent=pend.length;
+  document.getElementById('k-cob').textContent=cob.length;
+  document.getElementById('k-tot').textContent=fmt$(cob.reduce(function(s,f){return s+Number(f.agent_amount_ars||0);},0));
+  document.getElementById('k-pend-tot').textContent=fmt$(pend.reduce(function(s,f){return s+Number(f.agent_amount_ars||0);},0));
+  var tb=document.getElementById('tbody');
+  if(!all.length){tb.innerHTML='<tr><td colspan="10"><div class="empty">Sin facturas.<br><small>Las facturas se generan automáticamente al avanzar una operación a Boleto, Escritura o Contrato.</small></div></td></tr>';return;}
+  tb.innerHTML=all.map(function(f,i){
+    var op=f.operation||{},c=f.contact||{};
+    var st=f.status==='cobrada'?'badge-green':f.status==='pendiente'?'badge-amber':'badge-gray';
+    var stl=f.status==='cobrada'?'Cobrada':f.status==='pendiente'?'Pendiente':'Anulada';
+    return'<tr>'
+      +'<td style="font-weight:600;color:var(--blue)">#'+(all.length-i)+'</td>'
+      +'<td style="color:var(--text3)">'+fd(f.date)+'</td>'
+      +'<td style="font-size:12px">'+(c.name||'—')+'</td>'
+      +'<td>'+(f.side?'<span class="badge badge-gray">'+(SIDE[f.side]||f.side)+'</span>':'—')+'</td>'
+      +'<td><span class="badge badge-gray">'+(TRIGGER[f.trigger_stage]||f.trigger_stage||'—')+'</span></td>'
+      +'<td style="color:var(--text3);font-size:12px">'+(f.exchange_rate?'$'+f.exchange_rate:'—')+'</td>'
+      +'<td style="font-weight:500">'+fmt$(f.total_ars||0)+'</td>'
+      +'<td style="font-weight:600;color:var(--green)">'+fmt$(f.agent_amount_ars||0)+'</td>'
+      +'<td><span class="badge '+st+'">'+stl+'</span></td>'
+      +'<td><div class="flex gap-sm">'
+      +(f.status==='pendiente'?'<button class="btn btn-sm btn-green" data-id="'+f.id+'" onclick="payBtn(this)">Cobrar</button>':'')
+      +'</div></td></tr>';
+  }).join('');
+}
+async function payBtn(btn){
+  var id=btn.getAttribute('data-id');if(!confirm('¿Marcar como cobrada? Se registrará el ingreso en Finanzas.'))return;
+  var r=await db.invoices.pay(id);
+  if(r.error){toast('Error: '+r.error.message,'error');return;}
+  toast('Factura cobrada — ingreso registrado en finanzas ✅');await load();
+}
+function openCalc(){document.getElementById('modal-calc').classList.remove('hidden');calc();}
+function closeCalc(){document.getElementById('modal-calc').classList.add('hidden');}
+function calc(){
+  var v=parseFloat(document.getElementById('cv').value)||0;
+  var sv=parseFloat(document.getElementById('csv').value)||0;
+  var cc=parseFloat(document.getElementById('ccc').value)||0;
+  var pf=parseFloat(document.getElementById('cpf').value)||100;
+  var iva=parseFloat(document.getElementById('civa').value)||21;
+  var pa=parseFloat(document.getElementById('cpa').value)||45;
+  var tc=parseFloat(document.getElementById('ctc').value)||1;
+  var comTot=(v*sv/100)+(v*cc/100);
+  var af=comTot*pf/100;
+  var miva=af*iva/100;
+  var tot=af+miva;
+  var totARS=tot*tc;
+  var agente=af*pa/100;
+  var agenteARS=agente*tc;
+  var rows=[
+    ['Comisión vendedor ('+sv+'%)',fmtU(v*sv/100)],
+    ['Comisión comprador ('+cc+'%)',fmtU(v*cc/100)],
+    ['Total comisiones',fmtU(comTot)],
+    ['A facturar ('+pf+'%)',fmtU(af)],
+    ['IVA ('+iva+'%)',fmtU(miva)],
+    ['Total factura USD',fmtU(tot)],
+    ['Total factura ARS (TC '+tc+')',fmt$(totARS)],
+    ['Tu parte ('+pa+'%)',fmtU(agente)+' / '+fmt$(agenteARS)],
+  ];
+  document.getElementById('calc-result').innerHTML=rows.map(function(r){
+    var isKey=r[0].startsWith('Tu parte')||r[0].startsWith('Total factura ARS');
+    return'<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:0.5px solid var(--border2);font-size:'+(isKey?'13':'12')+'px">'
+      +'<span style="color:var(--text2)">'+r[0]+'</span>'
+      +'<strong style="color:'+(isKey?'var(--green)':'var(--text)')+'">'+r[1]+'</strong></div>';
+  }).join('');
+}
+async function saveManual(){
+  var v=parseFloat(document.getElementById('cv').value)||0;if(!v){toast('Ingresá valor','error');return;}
+  var sv=parseFloat(document.getElementById('csv').value)||0,cc=parseFloat(document.getElementById('ccc').value)||0;
+  var pf=parseFloat(document.getElementById('cpf').value)||100,iva=parseFloat(document.getElementById('civa').value)||21;
+  var pa=parseFloat(document.getElementById('cpa').value)||45,tc=parseFloat(document.getElementById('ctc').value)||1;
+  var comTot=(v*sv/100)+(v*cc/100),af=comTot*pf/100,miva=af*iva/100,tot=af+miva;
+  var agente=af*pa/100,agenteARS=agente*tc,totARS=tot*tc,subtARS=af*tc;
+  var r=await db.invoices.insert({user_id:uid,trigger_stage:'manual',date:hoy(),operation_value_usd:v,commission_pct:sv+cc,commission_usd:comTot,iva_pct:iva,iva_ars:miva*tc,subtotal_ars:subtARS,total_ars:totARS,agent_amount_ars:agenteARS,exchange_rate:tc,status:'pendiente'});
+  if(r.error){toast('Error','error');return;}
+  toast('Factura manual generada');closeCalc();await load();
+}
+</script>
+</body>
+</html>

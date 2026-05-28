@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#cc0000">
+<title>RE/MAX — Contactos</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div>
+<div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div>
+      <div class="ph-title">📇 Contactos</div>
+      <div class="ph-sub" id="cnt-sub"></div>
+    </div>
+    <button class="btn btn-primary" onclick="openModal()">+ Nuevo contacto</button>
+  </div>
+
+  <!-- KPIs rápidos -->
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-val" id="k-total">—</div><div class="kpi-sub">contactos</div></div>
+    <div class="kpi warn"><div class="kpi-label">Nurturing</div><div class="kpi-val" id="k-nurturing">—</div><div class="kpi-sub">esperando</div></div>
+    <div class="kpi bad"><div class="kpi-label">Vencidos</div><div class="kpi-val" id="k-vencidos">—</div><div class="kpi-sub">sin contactar</div></div>
+    <div class="kpi good"><div class="kpi-label">Referidos generados</div><div class="kpi-val" id="k-refs">—</div><div class="kpi-sub">total</div></div>
+  </div>
+
+  <!-- Filtros -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="flex gap-sm" style="flex-wrap:wrap">
+      <input type="search" id="q" placeholder="Buscar nombre, teléfono, email…" style="flex:1;min-width:180px" oninput="doFilter()">
+      <select id="fst" onchange="doFilter()" style="width:auto">
+        <option value="">Todos los estados</option>
+        <option value="activo">Activo</option>
+        <option value="nurturing">Nurturing</option>
+        <option value="captado">Captado</option>
+        <option value="comprador_activo">Comprador activo</option>
+        <option value="cerrado">Cerrado</option>
+        <option value="perdido">Perdido</option>
+      </select>
+      <select id="ftype" onchange="doFilter()" style="width:auto">
+        <option value="">Todos los tipos</option>
+        <option value="vendedor">Vendedor</option>
+        <option value="comprador">Comprador</option>
+        <option value="locador">Locador</option>
+        <option value="locatario">Locatario</option>
+        <option value="inversor">Inversor</option>
+      </select>
+      <select id="forig" onchange="doFilter()" style="width:auto">
+        <option value="">Todos los orígenes</option>
+        <option value="visita">Visita</option>
+        <option value="amigo">Amigo</option>
+        <option value="cliente_activo">Cliente activo</option>
+        <option value="marketing_digital">Marketing digital</option>
+        <option value="club_deportes">Club / deportes</option>
+        <option value="portal">Portal</option>
+        <option value="cartel">Cartel</option>
+        <option value="otro_agente_remax">Otro agente RE/MAX</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Tabla -->
+  <div class="card">
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Contacto</th>
+            <th>Teléfono</th>
+            <th>Tipo</th>
+            <th>Origen</th>
+            <th>Próximo seguimiento</th>
+            <th>Estado</th>
+            <th>Operaciones</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- Modal: Nuevo/Editar contacto -->
+<div class="overlay hidden" id="modal">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="mtit">Nuevo contacto</div>
+      <button class="btn btn-sm" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="frow"><label>Nombre completo *</label><input id="cn" placeholder="Juan Pérez"></div>
+      <div class="fgrid">
+        <div class="frow"><label>Teléfono</label><input id="cp" placeholder="11-1234-5678" type="tel"></div>
+        <div class="frow"><label>Email</label><input id="ce" placeholder="juan@email.com" type="email"></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow"><label>Cumpleaños</label><input id="cbday" type="date"></div>
+        <div class="frow"><label>Próximo seguimiento</label><input id="cnext" type="date"></div>
+      </div>
+      <div class="fgrid">
+        <div class="frow">
+          <label>Tipo de contacto</label>
+          <select id="ctype">
+            <option value="vendedor">Vendedor / Propietario</option>
+            <option value="comprador">Comprador</option>
+            <option value="locador">Locador (alquiler)</option>
+            <option value="locatario">Locatario / Inquilino</option>
+            <option value="inversor">Inversor</option>
+          </select>
+        </div>
+        <div class="frow">
+          <label>Estado</label>
+          <select id="cs">
+            <option value="activo">Activo</option>
+            <option value="nurturing">Nurturing</option>
+            <option value="captado">Captado</option>
+            <option value="comprador_activo">Comprador activo</option>
+            <option value="cerrado">Cerrado</option>
+            <option value="perdido">Perdido</option>
+          </select>
+        </div>
+      </div>
+      <div class="frow">
+        <label>Origen del contacto</label>
+        <select id="corig">
+          <option value="visita">Visita de propiedad</option>
+          <option value="amigo">Amigo / conocido</option>
+          <option value="cliente_activo">Cliente activo me refirió</option>
+          <option value="marketing_digital">Marketing digital / redes</option>
+          <option value="club_deportes">Club / deportes / vida social</option>
+          <option value="portal">Portal inmobiliario</option>
+          <option value="cartel">Cartel</option>
+          <option value="otro_agente_remax">Otro agente RE/MAX</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div class="frow" id="referred-row" style="display:none">
+        <label>¿Quién lo refirió? (contacto existente)</label>
+        <select id="cref"><option value="">Sin referido</option></select>
+      </div>
+      <div class="frow"><label>Notas</label><textarea id="cno" placeholder="Qué busca, zona, presupuesto, observaciones…"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="bsave" onclick="save()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Timeline del contacto -->
+<div class="overlay hidden" id="modal-tl">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="tl-name">—</div>
+        <div style="font-size:12px;color:var(--text3)" id="tl-sub">—</div>
+      </div>
+      <div class="flex gap-sm">
+        <button class="btn btn-primary btn-sm" id="tl-op-btn" onclick="startOperation()">+ Iniciar operación</button>
+        <button class="btn btn-sm" onclick="closeTL()">✕</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <!-- Info rápida -->
+      <div id="tl-info" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:1rem"></div>
+      <!-- Acciones rápidas WhatsApp -->
+      <div id="tl-wa" style="margin-bottom:1rem"></div>
+      <!-- Timeline -->
+      <div class="card-title">Historial de actividad</div>
+      <div id="tl-body" class="timeline" style="margin-top:.75rem"></div>
+      <!-- Registrar nueva acción -->
+      <div style="margin-top:1.25rem;padding-top:1rem;border-top:0.5px solid var(--border2)">
+        <div class="card-title">Registrar acción</div>
+        <div class="fgrid" style="margin-top:.5rem">
+          <div class="frow">
+            <label>Tipo de acción</label>
+            <select id="act-type">
+              <option value="llamada">Llamada</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="reunion">Reunión</option>
+              <option value="email">Email</option>
+              <option value="visita">Visita propiedad</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+          <div class="frow">
+            <label>Próximo seguimiento</label>
+            <input type="date" id="act-next">
+          </div>
+        </div>
+        <div class="frow">
+          <label>Notas de la acción</label>
+          <textarea id="act-notes" placeholder="¿Qué se habló? ¿Qué dijo?" style="min-height:60px"></textarea>
+        </div>
+        <button class="btn btn-primary" onclick="saveAction()">Registrar acción</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid, all=[], eid=null, curContact=null;
+
+var STATUS_BC = {
+  activo:'badge-green', nurturing:'badge-amber', captado:'badge-blue',
+  comprador_activo:'badge-blue', cerrado:'badge-gray', perdido:'badge-gray'
+};
+var STATUS_L = {
+  activo:'Activo', nurturing:'Nurturing', captado:'Captado',
+  comprador_activo:'Comprador activo', cerrado:'Cerrado', perdido:'Perdido'
+};
+var TYPE_L = {
+  vendedor:'Vendedor', comprador:'Comprador', locador:'Locador',
+  locatario:'Locatario', inversor:'Inversor'
+};
+
+(async function(){
+  var r = await initPage('contactos.html'); if(!r) return;
+  uid = r.user.id;
+  await load();
+})();
+
+async function load() {
+  var r = await db.contacts.list({user_id:uid});
+  all = r.data||[];
+  var today = hoy();
+  document.getElementById('k-total').textContent = all.length;
+  document.getElementById('k-nurturing').textContent = all.filter(function(c){ return c.status==='nurturing'; }).length;
+  document.getElementById('k-vencidos').textContent = all.filter(function(c){ return c.next_action_date && c.next_action_date < today && c.status==='activo'; }).length;
+  document.getElementById('cnt-sub').textContent = all.length+' contacto'+(all.length!==1?'s':'');
+
+  // Contar referidos
+  var refR = await sb.from('referrals').select('id',{count:'exact',head:true}).eq('user_id',uid);
+  document.getElementById('k-refs').textContent = refR.count||0;
+
+  render(all);
+}
+
+function render(list) {
+  var tb = document.getElementById('tbody');
+  if(!list.length) {
+    tb.innerHTML = '<tr><td colspan="8"><div class="empty">Sin contactos aún.<br><button class="btn btn-primary" style="margin-top:.75rem" onclick="openModal()">+ Agregar contacto</button></div></td></tr>';
+    return;
+  }
+  var today = hoy();
+  tb.innerHTML = list.map(function(c) {
+    var od = c.next_action_date && c.next_action_date < today && c.status === 'activo';
+    return '<tr>'
+      +'<td><div style="display:flex;align-items:center;gap:9px"><div class="avatar avatar-sm">'+ini(c.name)+'</div>'
+      +'<div><div style="font-weight:500;font-size:13px">'+c.name+'</div>'
+      +(c.email?'<div style="font-size:11px;color:var(--text3)">'+c.email+'</div>':'')+'</div></div></td>'
+      +'<td style="color:var(--text2)">'+(c.phone||'—')+(c.phone?'<div><a href="https://wa.me/54'+c.phone.replace(/\D/g,'')+'" target="_blank" style="font-size:10px;color:#25D366">WhatsApp</a></div>':'')+'</td>'
+      +'<td><span class="badge badge-gray">'+(TYPE_L[c.type]||c.type||'—')+'</span></td>'
+      +'<td style="font-size:12px;color:var(--text2)">'+(ORIGIN_LABELS[c.origin]||c.origin||'—')+'</td>'
+      +'<td style="color:'+(od?'var(--red)':'var(--text2)')+';font-weight:'+(od?600:400)+'">'
+      +fd(c.next_action_date)+(od?' ⚠️':'')+'</td>'
+      +'<td><span class="badge '+(STATUS_BC[c.status]||'badge-gray')+'">'+(STATUS_L[c.status]||c.status)+'</span></td>'
+      +'<td style="font-size:12px;color:var(--text3)">—</td>'
+      +'<td><div class="flex gap-sm">'
+      +'<button class="btn btn-sm btn-primary" data-id="'+c.id+'" onclick="openTL(this)">Ver</button>'
+      +'<button class="btn btn-sm" data-id="'+c.id+'" onclick="editBtn(this)">Editar</button>'
+      +'</div></td></tr>';
+  }).join('');
+}
+
+function doFilter() {
+  var q = document.getElementById('q').value.toLowerCase();
+  var st = document.getElementById('fst').value;
+  var tp = document.getElementById('ftype').value;
+  var or = document.getElementById('forig').value;
+  render(all.filter(function(c) {
+    return (!q||(c.name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)||(c.email||'').toLowerCase().includes(q))
+        && (!st||c.status===st) && (!tp||c.type===tp) && (!or||c.origin===or);
+  }));
+}
+
+// ── MODAL NUEVO/EDITAR ──────────────────────────────────────────────
+function openModal() {
+  eid=null; document.getElementById('mtit').textContent='Nuevo contacto';
+  ['cn','cp','ce','cno','cbday','cnext'].forEach(function(i){ document.getElementById(i).value=''; });
+  document.getElementById('cs').value='activo';
+  document.getElementById('ctype').value='vendedor';
+  document.getElementById('corig').value='otro';
+  document.getElementById('cref').value='';
+  // Cargar lista de contactos para referred_by
+  loadRefOptions();
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('modal').classList.add('hidden'); eid=null; }
+
+async function loadRefOptions() {
+  var sel = document.getElementById('cref');
+  sel.innerHTML = '<option value="">Sin referido</option>';
+  all.forEach(function(c) {
+    sel.innerHTML += '<option value="'+c.id+'">'+c.name+'</option>';
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('corig').addEventListener('change', function() {
+    var needsRef = ['amigo','cliente_activo','otro_agente_remax'].includes(this.value);
+    document.getElementById('referred-row').style.display = needsRef ? '' : 'none';
+  });
+});
+
+function editBtn(btn) { edit(btn.getAttribute('data-id')); }
+function edit(id) {
+  var c = all.find(function(x){ return x.id===id; }); if(!c) return;
+  eid=id; document.getElementById('mtit').textContent='Editar contacto';
+  document.getElementById('cn').value=c.name||'';
+  document.getElementById('cp').value=c.phone||'';
+  document.getElementById('ce').value=c.email||'';
+  document.getElementById('cs').value=c.status||'activo';
+  document.getElementById('ctype').value=c.type||'vendedor';
+  document.getElementById('corig').value=c.origin||'otro';
+  document.getElementById('cno').value=c.notes||'';
+  document.getElementById('cbday').value=c.birthday||'';
+  document.getElementById('cnext').value=c.next_action_date||'';
+  loadRefOptions().then(function(){ document.getElementById('cref').value=c.referred_by_contact_id||''; });
+  document.getElementById('modal').classList.remove('hidden');
+}
+
+async function save() {
+  var name = document.getElementById('cn').value.trim();
+  if(!name){ toast('El nombre es requerido','error'); return; }
+  var btn = document.getElementById('bsave'); btn.disabled=true; btn.textContent='Guardando…';
+  var p = {
+    name:name, phone:document.getElementById('cp').value.trim()||null,
+    email:document.getElementById('ce').value.trim()||null,
+    status:document.getElementById('cs').value,
+    type:document.getElementById('ctype').value,
+    origin:document.getElementById('corig').value,
+    notes:document.getElementById('cno').value.trim()||null,
+    birthday:document.getElementById('cbday').value||null,
+    next_action_date:document.getElementById('cnext').value||null,
+    referred_by_contact_id:document.getElementById('cref').value||null,
+    user_id:uid
+  };
+  var r = eid ? await db.contacts.update(eid,p) : await db.contacts.insert(p);
+  btn.disabled=false; btn.textContent='Guardar';
+  if(r.error){ toast('Error: '+r.error.message,'error'); return; }
+
+  // Si tiene cumpleaños y es nuevo → crear evento en Calendar
+  if(!eid && p.birthday && CRM.googleAccessToken) {
+    calendarCreateBirthday({name:p.name, birthday:p.birthday});
+  }
+
+  toast(eid?'Contacto actualizado':'Contacto creado');
+  closeModal(); await load();
+}
+
+// ── TIMELINE ────────────────────────────────────────────────────────
+function openTL(btn) { openTimeline(btn.getAttribute('data-id')); }
+
+async function openTimeline(id) {
+  curContact = all.find(function(x){ return x.id===id; }); if(!curContact) return;
+  document.getElementById('tl-name').textContent = curContact.name;
+  document.getElementById('tl-sub').textContent =
+    (TYPE_L[curContact.type]||'') + ' · ' + (ORIGIN_LABELS[curContact.origin]||'') +
+    (curContact.birthday ? ' · 🎂 '+fd2(curContact.birthday) : '');
+  document.getElementById('act-next').value = '';
+  document.getElementById('act-notes').value = '';
+
+  // Info rápida
+  var today = hoy();
+  var od = curContact.next_action_date && curContact.next_action_date < today;
+  document.getElementById('tl-info').innerHTML =
+    infoBox('📞 Tel.', curContact.phone||'—')
+    +infoBox('📅 Próximo', curContact.next_action_date ? (od?'⚠️ ':'')+fd(curContact.next_action_date) : '—', od?'color:var(--red)':'')
+    +infoBox('📊 Estado', STATUS_L[curContact.status]||curContact.status);
+
+  // WhatsApp rápido
+  if(curContact.phone) {
+    var waNum = '54'+curContact.phone.replace(/\D/g,'');
+    var msgs = {
+      nurturing:'Hola '+curContact.name.split(' ')[0]+'! Te escribo porque quería saber cómo estás y contarte sobre el mercado inmobiliario actual.',
+      post_venta:'Hola '+curContact.name.split(' ')[0]+'! Te escribo para ver cómo te fue con la mudanza y si necesitás algo.',
+      seguimiento:'Hola '+curContact.name.split(' ')[0]+'! Te escribo para hacer un seguimiento de nuestra última conversación.'
+    };
+    var waType = curContact.status==='nurturing'?'nurturing':curContact.status==='cerrado'?'post_venta':'seguimiento';
+    document.getElementById('tl-wa').innerHTML =
+      '<a href="https://wa.me/'+waNum+'?text='+encodeURIComponent(msgs[waType])+'" target="_blank" class="btn btn-green btn-sm">💬 WhatsApp rápido</a>';
+  } else {
+    document.getElementById('tl-wa').innerHTML = '';
+  }
+
+  // Cargar operaciones de este contacto
+  var [opsR, nurtR, psR] = await Promise.all([
+    sb.from('operations').select('id,type,stage,stage_date,stage_history,created_at').or('seller_contact_id.eq.'+id+',buyer_contact_id.eq.'+id).is('deleted_at',null).order('created_at'),
+    sb.from('nurturing_followups').select('*').eq('contact_id',id).order('scheduled_date'),
+    sb.from('post_sale_followups').select('*').eq('contact_id',id).order('scheduled_date')
+  ]);
+
+  var items = [];
+
+  // Fecha de creación del contacto
+  items.push({date:curContact.created_at.slice(0,10), label:'Contacto creado', detail:ORIGIN_LABELS[curContact.origin]||'', status:'done'});
+
+  // Operaciones
+  (opsR.data||[]).forEach(function(op){
+    var hist = op.stage_history||[];
+    if(!hist.length) hist = [{stage:op.stage, date:op.stage_date||op.created_at.slice(0,10)}];
+    hist.forEach(function(h){
+      items.push({date:h.date, label:'Operación: '+(STAGE_LABELS[h.stage]||h.stage), detail:op.type==='venta'?'Venta':'Alquiler', status:'done', href:'operaciones.html'});
+    });
+  });
+
+  // Nurturing
+  (nurtR.data||[]).forEach(function(n){
+    var done = !!n.completed_at;
+    var label = 'Nurturing — '+(n.stage==='7d'?'1er toque':n.stage==='30d'?'2do toque':n.stage==='60d'?'3er toque':n.stage==='90d'?'4to toque':'Toque mensual');
+    items.push({date:n.scheduled_date, label:label, detail:done?(n.result||''):'Pendiente', status:done?'done':n.scheduled_date<today?'pending':'active'});
+  });
+
+  // Post-venta
+  (psR.data||[]).forEach(function(p){
+    var done = !!p.completed_at;
+    var stageL = {'3_semanas':'3 semanas','3_meses':'3 meses','1_año':'1 año'}[p.stage]||p.stage;
+    items.push({date:p.scheduled_date, label:'Post-venta — '+stageL, detail:done?(p.referral_obtained?'✅ Referido obtenido':'Sin referido'):'Pendiente', status:done?'done':p.scheduled_date<today?'pending':'active'});
+  });
+
+  // Última acción manual
+  if(curContact.last_action && curContact.last_action.date) {
+    items.push({date:curContact.last_action.date, label:'Acción: '+(curContact.last_action.type||''), detail:curContact.last_action.notes||'', status:'done'});
+  }
+
+  items.sort(function(a,b){ return a.date.localeCompare(b.date); });
+
+  var dotClass = {done:'done', active:'active', pending:'pending'};
+  document.getElementById('tl-body').innerHTML = items.length ? items.map(function(it, i){
+    var isLast = i===items.length-1;
+    return '<div class="tl-item">'
+      +'<div class="tl-dot-wrap"><div class="tl-dot '+(dotClass[it.status]||'')+'"></div>'+(isLast?'':'<div class="tl-line"></div>')+'</div>'
+      +'<div class="tl-content">'
+      +'<div class="tl-title">'+(it.href?'<a href="'+it.href+'" style="color:inherit;text-decoration:none">':'')
+      +it.label+(it.href?'</a>':'')+'</div>'
+      +'<div class="tl-date">'+fd(it.date)+'</div>'
+      +(it.detail?'<div class="tl-note">'+it.detail+'</div>':'')
+      +'</div></div>';
+  }).join('') : '<div class="muted">Sin actividad registrada.</div>';
+
+  // Botón iniciar operación solo si es vendedor/locador
+  var canOp = ['vendedor','comprador','locador','locatario'].includes(curContact.type);
+  document.getElementById('tl-op-btn').style.display = canOp ? '' : 'none';
+
+  document.getElementById('modal-tl').classList.remove('hidden');
+}
+
+function infoBox(label, val, style) {
+  return '<div style="background:var(--surface2);border-radius:6px;padding:8px 10px;text-align:center">'
+    +'<div style="font-size:10px;color:var(--text3);margin-bottom:2px">'+label+'</div>'
+    +'<div style="font-size:13px;font-weight:500;'+(style||'')+'">'+val+'</div></div>';
+}
+
+function closeTL() { document.getElementById('modal-tl').classList.add('hidden'); curContact=null; }
+
+async function saveAction() {
+  if(!curContact) return;
+  var type  = document.getElementById('act-type').value;
+  var notes = document.getElementById('act-notes').value.trim();
+  var next  = document.getElementById('act-next').value;
+  var upd = { last_action:{type:type,date:hoy(),notes:notes}, user_id:uid };
+  if(next) upd.next_action_date = next;
+  var r = await db.contacts.update(curContact.id, upd);
+  if(r.error){ toast('Error al registrar','error'); return; }
+  // Crear evento en Calendar si hay fecha
+  if(next && CRM.googleAccessToken) {
+    calendarCreateEvent({
+      title:'Seguimiento: '+curContact.name+' — '+type,
+      description:notes||'',
+      date:next, duration_minutes:30, type:'seguimiento'
+    });
+  }
+  toast('Acción registrada');
+  await load();
+  openTimeline(curContact.id);
+}
+
+function startOperation() {
+  if(!curContact) return;
+  closeTL();
+  window.location.href = 'operaciones.html?contact='+curContact.id;
+}
+</script>
+</body>
+</html>

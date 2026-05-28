@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#cc0000">
+<title>RE/MAX — Post-venta</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="tc"></div>
+<div class="loading" id="loading">Cargando…</div>
+<div id="sidebar-container"></div>
+
+<div id="app" style="display:none">
+<main class="main">
+  <div class="ph">
+    <div>
+      <div class="ph-title">❤️ Post-venta</div>
+      <div class="ph-sub">Seguimiento 3 semanas · 3 meses · 1 año — siempre con pedido de referido</div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-grid" style="margin-bottom:1rem">
+    <div class="kpi bad"><div class="kpi-label">Vencidos</div><div class="kpi-val" id="k-venc">—</div><div class="kpi-sub">sin completar</div></div>
+    <div class="kpi warn"><div class="kpi-label">Esta semana</div><div class="kpi-val" id="k-week">—</div><div class="kpi-sub">próximos 7 días</div></div>
+    <div class="kpi"><div class="kpi-label">Total pendientes</div><div class="kpi-val" id="k-total">—</div><div class="kpi-sub">en seguimiento</div></div>
+    <div class="kpi good"><div class="kpi-label">Referidos obtenidos</div><div class="kpi-val" id="k-refs">—</div><div class="kpi-sub">desde post-ventas</div></div>
+  </div>
+
+  <!-- Lista pendientes -->
+  <div class="card" style="margin-bottom:1rem">
+    <div class="flex-between mb-2">
+      <div class="card-title" style="margin:0">📋 Toques pendientes</div>
+      <select id="fstatus" onchange="doFilter()" class="btn btn-sm" style="padding:.3rem .6rem;width:auto">
+        <option value="todos">Todos</option>
+        <option value="vencido">Vencidos ⚠️</option>
+        <option value="hoy">Hoy</option>
+        <option value="semana">Esta semana</option>
+        <option value="futuro">Futuros</option>
+      </select>
+    </div>
+    <div id="pv-list"></div>
+  </div>
+
+  <!-- Historial -->
+  <div class="card">
+    <div class="card-title">✅ Historial completados</div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Contacto</th><th>Etapa</th><th>Fecha</th><th>Completado</th><th>Referido</th></tr>
+        </thead>
+        <tbody id="tbody-hist"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- Modal: Registrar post-venta -->
+<div class="overlay hidden" id="modal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="mtit">Registrar post-venta</div>
+        <div style="font-size:12px;color:var(--text3)" id="msub">—</div>
+      </div>
+      <button class="btn btn-sm" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Mensaje WhatsApp pre-armado -->
+      <div id="wa-section" style="margin-bottom:1rem"></div>
+
+      <div class="frow"><label>Notas del contacto</label><textarea id="mnotes" placeholder="¿Cómo está? ¿Necesita algo? ¿Qué comentó?" style="min-height:70px"></textarea></div>
+
+      <!-- Pedido de referido -->
+      <div style="background:var(--blue-light);border-radius:8px;padding:14px;margin-bottom:.85rem">
+        <div style="font-size:13px;font-weight:500;margin-bottom:.5rem;color:var(--blue)">🤝 Pedido de referido</div>
+        <div class="frow" style="margin-bottom:.5rem">
+          <label>¿Pediste un referido?</label>
+          <select id="ref-req" onchange="toggleRef()">
+            <option value="no">No pedí en esta ocasión</option>
+            <option value="si">Sí, pedí un referido</option>
+          </select>
+        </div>
+        <div id="ref-obtained-row" class="hidden">
+          <div class="frow" style="margin-bottom:.5rem">
+            <label>¿Te dio un referido?</label>
+            <select id="ref-obt" onchange="toggleRefData()">
+              <option value="no">No, pero estuvo receptivo</option>
+              <option value="si">Sí, me dio un referido</option>
+            </select>
+          </div>
+          <div id="ref-data" class="hidden">
+            <div style="background:var(--green-light);border-radius:6px;padding:10px;margin-top:.5rem">
+              <div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:.5rem">DATOS DEL REFERIDO</div>
+              <div class="fgrid">
+                <div class="frow"><label>Nombre</label><input id="ref-name" placeholder="Nombre del referido"></div>
+                <div class="frow"><label>Teléfono</label><input id="ref-phone" placeholder="11-1234-5678" type="tel"></div>
+              </div>
+              <div class="frow"><label>Email</label><input id="ref-email" placeholder="email@ejemplo.com" type="email"></div>
+              <div class="frow">
+                <label>¿Qué necesita?</label>
+                <select id="ref-type">
+                  <option value="vendedor">Quiere vender</option>
+                  <option value="comprador">Quiere comprar</option>
+                  <option value="locador">Quiere alquilar su propiedad</option>
+                  <option value="locatario">Busca alquilar</option>
+                  <option value="inversor">Inversor</option>
+                </select>
+              </div>
+              <div class="frow"><label>Notas del referido</label><textarea id="ref-notes" placeholder="¿Qué busca? ¿Cuándo? ¿Zona?" style="min-height:50px"></textarea></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="bsave" onclick="savePV()">Registrar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="shared.js"></script>
+<script>
+var uid, pending=[], completed=[], curPV=null;
+
+var STAGE_L = { '3_semanas':'3 semanas','3_meses':'3 meses','1_año':'1 año' };
+var STAGE_MSG = {
+  '3_semanas': function(name){ return 'Hola '+name+'! Han pasado 3 semanas desde el cierre y quería saber cómo va todo con la mudanza y el nuevo hogar. ¿Todo bien? ¿Necesitás algo?'; },
+  '3_meses':   function(name){ return 'Hola '+name+'! Ya pasaron 3 meses y quería ver cómo estás disfrutando el nuevo lugar. ¿Estás contento/a con la decisión? Si conocés a alguien que esté pensando en vender o comprar, me encantaría que me recomendaras.'; },
+  '1_año':     function(name){ return 'Hola '+name+'! ¿Ya es un año! Quería recordar ese gran momento que pasamos juntos y ver cómo seguís. Si algún amigo o familiar necesita asesoramiento inmobiliario, siempre podés recomendarme. ¡Gracias por la confianza!'; }
+};
+
+(async function(){
+  var r = await initPage('postventa.html'); if(!r) return;
+  uid = r.user.id;
+  await load();
+})();
+
+async function load() {
+  var [pendR, compR, refR] = await Promise.all([
+    db.postSale.list(uid),
+    sb.from('post_sale_followups').select('*, contact:contacts(id,name)').eq('user_id',uid).not('completed_at','is',null).order('completed_at',{ascending:false}).limit(30),
+    sb.from('post_sale_followups').select('id',{count:'exact',head:true}).eq('user_id',uid).eq('referral_obtained',true)
+  ]);
+  pending   = pendR.data||[];
+  completed = compR.data||[];
+
+  var today = hoy();
+  var in7   = addDays(today,7);
+  document.getElementById('k-venc').textContent  = pending.filter(function(f){ return f.scheduled_date<today; }).length;
+  document.getElementById('k-week').textContent  = pending.filter(function(f){ return f.scheduled_date>=today && f.scheduled_date<=in7; }).length;
+  document.getElementById('k-total').textContent = pending.length;
+  document.getElementById('k-refs').textContent  = refR.count||0;
+
+  doFilter();
+  renderHistory();
+}
+
+function doFilter() {
+  var f = document.getElementById('fstatus').value;
+  var today = hoy(), in7 = addDays(today,7);
+  var list = pending;
+  if(f==='vencido') list = pending.filter(function(x){ return x.scheduled_date<today; });
+  else if(f==='hoy')    list = pending.filter(function(x){ return x.scheduled_date===today; });
+  else if(f==='semana') list = pending.filter(function(x){ return x.scheduled_date>=today&&x.scheduled_date<=in7; });
+  else if(f==='futuro') list = pending.filter(function(x){ return x.scheduled_date>in7; });
+  renderList(list);
+}
+
+function renderList(list) {
+  var el = document.getElementById('pv-list');
+  if(!list.length){ el.innerHTML='<div class="empty">Sin toques pendientes en este filtro.</div>'; return; }
+  var today = hoy();
+  el.innerHTML = list.map(function(f){
+    var c = f.contact||{};
+    var op = f.operation||{};
+    var venc = f.scheduled_date<today;
+    var ishoy = f.scheduled_date===today;
+    var semColor = venc?'sem-red':ishoy?'sem-amber':'sem-green';
+    var bg = venc?'var(--red-mid)':ishoy?'var(--amber-light)':'var(--surface)';
+    return '<div style="display:flex;align-items:center;gap:12px;padding:.85rem;border-radius:8px;background:'+bg+';border:0.5px solid var(--border);margin-bottom:6px">'
+      +'<div class="semaforo '+semColor+'"></div>'
+      +'<div class="avatar avatar-sm">'+ini(c.name||'')+'</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:13px;font-weight:500">'+c.name+'</div>'
+      +'<div style="font-size:11px;color:var(--text2)">'+(STAGE_L[f.stage]||f.stage)+' · '+fd(f.scheduled_date)+(venc?' ⚠️ VENCIDO':ishoy?' 📅 HOY':'')+'</div>'
+      +'<div style="font-size:11px;color:var(--text3)">'+(op.type==='venta'?'Venta':'Alquiler')+'</div>'
+      +'</div>'
+      +'<div class="flex gap-sm">'
+      +(c.phone?'<a href="https://wa.me/54'+c.phone.replace(/\D/g,'')+'" target="_blank" class="btn btn-sm btn-green">💬 WA</a>':'')
+      +'<button class="btn btn-sm btn-primary" data-id="'+f.id+'" onclick="openPV(this)">Registrar</button>'
+      +'</div></div>';
+  }).join('');
+}
+
+function renderHistory() {
+  var tb = document.getElementById('tbody-hist');
+  if(!completed.length){ tb.innerHTML='<tr><td colspan="5"><div class="empty" style="padding:1rem">Sin post-ventas completados aún.</div></td></tr>'; return; }
+  tb.innerHTML = completed.map(function(f){
+    var c = f.contact||{};
+    return '<tr>'
+      +'<td><div style="display:flex;align-items:center;gap:8px"><div class="avatar avatar-sm">'+ini(c.name||'')+'</div><span style="font-weight:500">'+c.name+'</span></div></td>'
+      +'<td><span class="badge badge-blue">'+(STAGE_L[f.stage]||f.stage)+'</span></td>'
+      +'<td style="color:var(--text3)">'+fd(f.scheduled_date)+'</td>'
+      +'<td style="color:var(--text3)">'+fd(f.completed_at&&f.completed_at.slice(0,10))+'</td>'
+      +'<td>'+(f.referral_obtained?'<span class="badge badge-green">✅ Referido</span>':f.referral_requested?'<span class="badge badge-gray">Pedido, no obtuvo</span>':'<span class="badge badge-gray">No pedido</span>')+'</td>'
+      +'</tr>';
+  }).join('');
+}
+
+function openPV(btn) {
+  var id = btn.getAttribute('data-id');
+  curPV = pending.find(function(f){ return f.id===id; });
+  if(!curPV) return;
+  var c = curPV.contact||{};
+  document.getElementById('mtit').textContent = 'Post-venta — '+c.name;
+  document.getElementById('msub').textContent = (STAGE_L[curPV.stage]||curPV.stage)+' · '+fd(curPV.scheduled_date);
+  document.getElementById('mnotes').value='';
+  document.getElementById('ref-req').value='no';
+  document.getElementById('ref-obt').value='no';
+  ['ref-name','ref-phone','ref-email','ref-notes'].forEach(function(i){ document.getElementById(i).value=''; });
+  document.getElementById('ref-type').value='vendedor';
+  document.getElementById('ref-obtained-row').classList.add('hidden');
+  document.getElementById('ref-data').classList.add('hidden');
+
+  // Mensaje WhatsApp según etapa
+  if(c.phone) {
+    var waNum = '54'+c.phone.replace(/\D/g,'');
+    var msgFn = STAGE_MSG[curPV.stage]||STAGE_MSG['3_meses'];
+    var msg = msgFn(c.name.split(' ')[0]);
+    document.getElementById('wa-section').innerHTML =
+      '<div style="background:var(--surface2);border-radius:8px;padding:10px 12px">'
+      +'<div style="font-size:11px;font-weight:600;color:var(--text2);margin-bottom:6px">MENSAJE SUGERIDO</div>'
+      +'<div style="font-size:12px;color:var(--text2);margin-bottom:8px;line-height:1.5">'+msg+'</div>'
+      +'<a href="https://wa.me/'+waNum+'?text='+encodeURIComponent(msg)+'" target="_blank" class="btn btn-sm btn-green">💬 Abrir en WhatsApp</a>'
+      +'</div>';
+  } else {
+    document.getElementById('wa-section').innerHTML='';
+  }
+  document.getElementById('modal').classList.remove('hidden');
+}
+function closeModal(){ document.getElementById('modal').classList.add('hidden'); curPV=null; }
+
+function toggleRef(){
+  var v = document.getElementById('ref-req').value;
+  document.getElementById('ref-obtained-row').classList.toggle('hidden', v==='no');
+  if(v==='no') document.getElementById('ref-data').classList.add('hidden');
+}
+function toggleRefData(){
+  var v = document.getElementById('ref-obt').value;
+  document.getElementById('ref-data').classList.toggle('hidden', v==='no');
+}
+
+async function savePV() {
+  if(!curPV) return;
+  var btn = document.getElementById('bsave'); btn.disabled=true; btn.textContent='Guardando…';
+
+  var reqRef = document.getElementById('ref-req').value==='si';
+  var obtRef = reqRef && document.getElementById('ref-obt').value==='si';
+
+  // Completar el post-venta
+  var r = await db.postSale.complete(curPV.id, {
+    referral_requested:reqRef, referral_obtained:obtRef,
+    notes:document.getElementById('mnotes').value.trim()||null
+  });
+  if(r.error){ btn.disabled=false; btn.textContent='Registrar'; toast('Error: '+r.error.message,'error'); return; }
+
+  // Si obtuvo referido → crear contacto nuevo + referral
+  if(obtRef) {
+    var refName  = document.getElementById('ref-name').value.trim();
+    var refPhone = document.getElementById('ref-phone').value.trim();
+    var refEmail = document.getElementById('ref-email').value.trim();
+    var refType  = document.getElementById('ref-type').value;
+    var refNotes = document.getElementById('ref-notes').value.trim();
+
+    if(refName) {
+      // Crear contacto referido
+      var newContact = await db.contacts.insert({
+        user_id:uid, name:refName, phone:refPhone||null, email:refEmail||null,
+        type:refType, origin:'cliente_activo',
+        referred_by_contact_id:curPV.contact_id,
+        status:'activo', notes:refNotes||null
+      });
+
+      if(newContact.data) {
+        // Crear registro de referido
+        await db.referrals.insert({
+          user_id:uid,
+          source_contact_id:curPV.contact_id,
+          referred_contact_id:newContact.data.id,
+          source_type:'cliente_activo', status:'pendiente',
+          commission_pct:0
+        });
+        // Crear evento cumpleaños si tiene fecha
+        if(CRM.googleAccessToken) {
+          calendarCreateBirthday(newContact.data);
+        }
+        toast('Referido creado: '+refName+' ✅');
+      }
+    }
+  }
+
+  // Mail al broker si hay post-venta vencido (ya lo maneja la vista today_alerts)
+
+  var stageL = STAGE_L[curPV.stage]||curPV.stage;
+  toast('Post-venta registrado ('+stageL+')');
+  btn.disabled=false; btn.textContent='Registrar';
+  closeModal(); await load();
+}
+</script>
+</body>
+</html>
