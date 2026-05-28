@@ -2,8 +2,8 @@
 // CONFIGURACIÓN SUPABASE
 // ============================================================
 
-const SUPABASE_URL = localStorage.getItem('sb_url') || 'https://kwwhwlkfepfemutqzfcs.supabase.co';
-const SUPABASE_KEY = localStorage.getItem('sb_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt3d2h3bGtmZXBmZW11dHF6ZmNzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDEwODkwMDAsImV4cCI6MjAxNjY2NTAwMH0.xxxxx';
+const SUPABASE_URL = localStorage.getItem('sb_url') || 'https://ospeexcmawmomjcflmtd.supabase.co/rest/v1/';
+const SUPABASE_KEY = localStorage.getItem('sb_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zcGVleGNtYXdtb21qY2ZsbXRkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5OTgwMzgsImV4cCI6MjA5NTU3NDAzOH0.Ju5vwlv2L7E6p9ktI-LEh-rFUmGsj32Dw9VK1zrs1R0';
 
 // Crear cliente Supabase
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
